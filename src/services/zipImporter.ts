@@ -24,17 +24,50 @@ interface ZipMetadata {
   transcript?: string;
 }
 
-const generateId = () => {
-  return Math.random().toString(36).substr(2, 9);
-};
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
+/**
+ * The ZIP spec mandates forward-slash path separators, but some Windows
+ * tools (PowerShell's Compress-Archive in particular) write backslashes
+ * instead. Building one normalized index up front means every lookup below
+ * works regardless of which separator the archive actually used.
+ */
+class ZipIndex {
+  readonly paths: string[];
+  private readonly realKeyByNormalized: Map<string, string>;
+  private readonly zip: JSZip;
+
+  constructor(zip: JSZip) {
+    this.zip = zip;
+    this.realKeyByNormalized = new Map();
+    zip.forEach((relativePath) => {
+      this.realKeyByNormalized.set(normalize(relativePath), relativePath);
+    });
+    this.paths = Array.from(this.realKeyByNormalized.keys());
+  }
+
+  file(normalizedPath: string) {
+    const realKey = this.realKeyByNormalized.get(normalize(normalizedPath));
+    return realKey ? this.zip.file(realKey) : null;
+  }
+
+  has(normalizedPath: string) {
+    return this.realKeyByNormalized.has(normalize(normalizedPath));
+  }
+}
+
+function normalize(path: string): string {
+  return path.replace(/\\/g, "/");
+}
 
 export const importZipFile = async (
   zipFile: File,
   courseName?: string,
   existingCourseId?: string
 ): Promise<ImportResult> => {
-  const zip = new JSZip();
-  await zip.loadAsync(zipFile);
+  const rawZip = new JSZip();
+  await rawZip.loadAsync(zipFile);
+  const zip = new ZipIndex(rawZip);
 
   const progress: ImportProgress = {
     total: 0,
@@ -47,7 +80,6 @@ export const importZipFile = async (
   const errors: { [key: string]: string } = {};
   const lessons: Lesson[] = [];
 
-  // Detect structure
   const manifest = await loadManifest(zip);
   const structure = detectStructure(zip, manifest);
 
@@ -57,7 +89,7 @@ export const importZipFile = async (
   let course: Course | null = null;
 
   if (!courseId) {
-    const courseTitle = courseName || zipFile.name.replace(".zip", "").slice(0, 100);
+    const courseTitle = courseName || zipFile.name.replace(/\.zip$/i, "").slice(0, 100);
     course = {
       id: generateId(),
       title: courseTitle,
@@ -72,6 +104,11 @@ export const importZipFile = async (
     await saveCourse(course);
   }
 
+  if (structure.lessons.length === 0) {
+    errors["(archive)"] =
+      "No lesson folders were found in this ZIP. Expected a manifest.json or per-video folders containing audio.mp3.";
+  }
+
   for (const lessonDir of structure.lessons) {
     progress.processed++;
     try {
@@ -82,7 +119,7 @@ export const importZipFile = async (
         progress.imported++;
       }
     } catch (error) {
-      errors[lessonDir] = String(error);
+      errors[lessonDir] = error instanceof Error ? error.message : String(error);
       progress.failed++;
     }
   }
@@ -100,51 +137,53 @@ export const importZipFile = async (
   };
 };
 
-const loadManifest = async (zip: JSZip): Promise<ZipMetadata[] | null> => {
+const loadManifest = async (zip: ZipIndex): Promise<ZipMetadata[] | null> => {
   try {
     const manifestFile = zip.file("manifest.json") || zip.file("echo_media/manifest.json");
     if (manifestFile) {
       const content = await manifestFile.async("string");
-      return JSON.parse(content);
+      const parsed = JSON.parse(content);
+      return Array.isArray(parsed) ? parsed : null;
     }
   } catch {
-    // Manifest is optional
+    // Manifest is optional — fall back to folder discovery.
   }
   return null;
 };
 
-const detectStructure = (zip: JSZip, manifest: ZipMetadata[] | null) => {
+const detectStructure = (zip: ZipIndex, manifest: ZipMetadata[] | null) => {
   const lessons: string[] = [];
 
-  if (manifest && Array.isArray(manifest)) {
+  if (manifest && manifest.length > 0) {
     manifest.forEach((m) => {
-      if (m.video_id) {
-        lessons.push(m.video_id);
-      }
+      if (m.video_id) lessons.push(m.video_id);
     });
-  } else {
-    // Auto-discover folders
-    zip.forEach((relativePath) => {
-      const depth = relativePath.split("/").length;
-      if (depth === 2) {
-        const folder = relativePath.split("/")[0];
-        if (!folder.startsWith(".") && folder !== "echo_media" && !lessons.includes(folder)) {
-          lessons.push(folder);
-        }
-      } else if (depth === 3 && relativePath.includes("echo_media/")) {
-        const folder = relativePath.split("/")[1];
-        if (!folder.startsWith(".") && !lessons.includes(folder)) {
-          lessons.push(folder);
-        }
-      }
-    });
+    return { lessons: [...new Set(lessons)] };
   }
+
+  // Auto-discover folders by walking the normalized path list.
+  zip.paths.forEach((relativePath) => {
+    const segments = relativePath.split("/").filter(Boolean);
+    const depth = segments.length;
+
+    if (depth === 2) {
+      const folder = segments[0];
+      if (!folder.startsWith(".") && folder !== "echo_media" && !lessons.includes(folder)) {
+        lessons.push(folder);
+      }
+    } else if (depth === 3 && segments[0] === "echo_media") {
+      const folder = segments[1];
+      if (!folder.startsWith(".") && !lessons.includes(folder)) {
+        lessons.push(folder);
+      }
+    }
+  });
 
   return { lessons: [...new Set(lessons)] };
 };
 
 const processLesson = async (
-  zip: JSZip,
+  zip: ZipIndex,
   folderName: string,
   courseId: string
 ): Promise<Lesson | null> => {
@@ -156,19 +195,19 @@ const processLesson = async (
     title: folderName,
   };
 
-  // Try to load metadata
   const metadataFile = zip.file(metadataPath);
   if (metadataFile) {
     try {
       const content = await metadataFile.async("string");
-      metadata = JSON.parse(content);
-    } catch (error) {
-      // Metadata parse failed, continue with defaults
+      metadata = { ...metadata, ...JSON.parse(content) };
+    } catch {
+      // Metadata parse failed — continue with the folder-derived defaults.
     }
   }
 
-  // Load audio
-  const audioPath = metadata.audio ? findFile(zip, metadata.audio) : findFile(zip, `${basePrefix}audio.mp3`);
+  const audioPath = metadata.audio
+    ? findFile(zip, metadata.audio, basePrefix)
+    : findFile(zip, "audio.mp3", basePrefix);
   if (!audioPath) {
     throw new Error("Audio file not found");
   }
@@ -180,9 +219,10 @@ const processLesson = async (
 
   const audioBlob = await audioFile.async("blob");
 
-  // Load transcript
   let transcriptCues: ReturnType<typeof parseSRT> = [];
-  const transcriptPath = metadata.transcript ? findFile(zip, metadata.transcript) : findFile(zip, `${basePrefix}transcript.srt`);
+  const transcriptPath = metadata.transcript
+    ? findFile(zip, metadata.transcript, basePrefix)
+    : findFile(zip, "transcript.srt", basePrefix);
   if (transcriptPath) {
     try {
       const transcriptFile = zip.file(transcriptPath);
@@ -190,14 +230,17 @@ const processLesson = async (
         const transcriptContent = await transcriptFile.async("string");
         transcriptCues = parseSRT(transcriptContent);
       }
-    } catch (error) {
-      // Transcript parsing failed, continue without it
+    } catch {
+      // Transcript parsing failed — import the audio anyway, without cues.
     }
   }
 
-  // Load images
-  const thumbnailPath = metadata.thumbnail ? findFile(zip, metadata.thumbnail) : findFile(zip, `${basePrefix}thumbnail.jpg`);
-  const framePath = metadata.frame ? findFile(zip, metadata.frame) : findFile(zip, `${basePrefix}frame.jpg`);
+  const thumbnailPath = metadata.thumbnail
+    ? findFile(zip, metadata.thumbnail, basePrefix)
+    : findFile(zip, "thumbnail.jpg", basePrefix);
+  const framePath = metadata.frame
+    ? findFile(zip, metadata.frame, basePrefix)
+    : findFile(zip, "frame.jpg", basePrefix);
 
   const lesson: Lesson = {
     id: generateId(),
@@ -216,28 +259,20 @@ const processLesson = async (
     tags: [],
   };
 
-  // Store assets
-  if (audioBlob) {
-    lesson.audioUrl = URL.createObjectURL(audioBlob);
-    await saveAsset({
-      lessonId: lesson.id,
-      type: "audio",
-      blob: audioBlob,
-      mimeType: "audio/mpeg",
-    });
-  }
+  // Store assets. URLs are resolved on demand via mediaUrls.ts rather than
+  // persisted here, since blob: URLs don't survive a page reload.
+  await saveAsset({
+    lessonId: lesson.id,
+    type: "audio",
+    blob: audioBlob,
+    mimeType: "audio/mpeg",
+  });
 
   if (thumbnailPath) {
     const thumbFile = zip.file(thumbnailPath);
     if (thumbFile) {
       const thumbBlob = await thumbFile.async("blob");
-      lesson.thumbnailUrl = URL.createObjectURL(thumbBlob);
-      await saveAsset({
-        lessonId: lesson.id,
-        type: "thumbnail",
-        blob: thumbBlob,
-        mimeType: "image/jpeg",
-      });
+      await saveAsset({ lessonId: lesson.id, type: "thumbnail", blob: thumbBlob, mimeType: "image/jpeg" });
     }
   }
 
@@ -245,46 +280,40 @@ const processLesson = async (
     const frameFile = zip.file(framePath);
     if (frameFile) {
       const frameBlob = await frameFile.async("blob");
-      lesson.frameUrl = URL.createObjectURL(frameBlob);
-      await saveAsset({
-        lessonId: lesson.id,
-        type: "frame",
-        blob: frameBlob,
-        mimeType: "image/jpeg",
-      });
+      await saveAsset({ lessonId: lesson.id, type: "frame", blob: frameBlob, mimeType: "image/jpeg" });
     }
   }
 
   return lesson;
 };
 
-const findFolderPrefix = (zip: JSZip, folderName: string): string => {
-  const folders = new Set<string>();
-  zip.forEach((path) => {
-    if (path.includes(folderName)) {
-      const match = path.match(`^(.*${folderName}/?)`);
-      if (match) {
-        folders.add(match[1]);
-      }
-    }
-  });
+/** Finds the directory prefix (e.g. "echo_media/testVideo001/") that contains `folderName`. */
+const findFolderPrefix = (zip: ZipIndex, folderName: string): string => {
+  const escaped = folderName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^(.*?${escaped}/)`);
 
-  // Return the shortest matching prefix (most specific)
-  return Array.from(folders).sort((a, b) => a.length - b.length)[0] || `${folderName}/`;
+  const candidates = zip.paths
+    .map((p) => p.match(pattern)?.[1])
+    .filter((p): p is string => Boolean(p));
+
+  return candidates.sort((a, b) => a.length - b.length)[0] || `${folderName}/`;
 };
 
-const findFile = (zip: JSZip, possiblePath: string): string | null => {
+/**
+ * Resolves a file referenced by metadata (paths are relative to the
+ * `echo_media` root, not the lesson's own folder) or falls back to the
+ * conventional filename inside the lesson's folder.
+ */
+const findFile = (zip: ZipIndex, referencedPath: string, basePrefix: string): string | null => {
+  const bareName = referencedPath.replace(/^.*\//, "");
   const candidates = [
-    possiblePath,
-    possiblePath.replace(/\\/g, "/"),
-    `echo_media/${possiblePath}`,
-    `echo_media/${possiblePath.replace(/^.*\//, "")}`,
+    referencedPath,
+    `echo_media/${referencedPath}`,
+    `${basePrefix}${bareName}`,
   ];
 
   for (const candidate of candidates) {
-    if (zip.file(candidate)) {
-      return candidate;
-    }
+    if (zip.has(candidate)) return candidate;
   }
 
   return null;
@@ -292,14 +321,16 @@ const findFile = (zip: JSZip, possiblePath: string): string | null => {
 
 const loadCourseById = async (courseId: string) => {
   const course = await getCourse(courseId);
-  return course || {
-    id: courseId,
-    title: "New Course",
-    tags: [],
-    isPinned: false,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    lessonsCount: 0,
-    completedCount: 0,
-  };
+  return (
+    course || {
+      id: courseId,
+      title: "New Course",
+      tags: [],
+      isPinned: false,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      lessonsCount: 0,
+      completedCount: 0,
+    }
+  );
 };

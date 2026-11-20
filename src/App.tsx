@@ -1,38 +1,43 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Course, Lesson } from "./types";
-import { initDB, getAllCourses, getLessonsByCourse, getAsset } from "./services/storage";
+import { initDB, getAllCourses, getLessonsByCourse } from "./services/storage";
 import { importZipFile } from "./services/zipImporter";
+import { hydrateLessonsArtwork, resolveLessonAudioUrl } from "./services/mediaUrls";
 import { Library } from "./components/Library";
 import { Player } from "./components/Player";
+import { MiniPlayer } from "./components/MiniPlayer";
+import { usePlaybackController } from "./hooks/usePlaybackController";
 import "./styles/globals.css";
-import { X } from "lucide-react";
+
+type View = "library" | "player";
 
 export default function App() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [lessons, setLessons] = useState<Map<string, Lesson[]>>(new Map());
-  const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string>("");
+  const [view, setView] = useState<View>("library");
   const [isImporting, setIsImporting] = useState(false);
-  const [importError, setImportError] = useState<string>("");
+  const [importMessage, setImportMessage] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize database and load data
+  const controller = usePlaybackController();
+
   useEffect(() => {
     const init = async () => {
       try {
         await initDB();
         const allCourses = await getAllCourses();
-        setCourses(allCourses);
 
-        // Load lessons for each course
         const lessonsMap = new Map<string, Lesson[]>();
         for (const course of allCourses) {
           const courseLessons = await getLessonsByCourse(course.id);
-          lessonsMap.set(course.id, courseLessons);
+          const hydrated = await hydrateLessonsArtwork(courseLessons);
+          lessonsMap.set(course.id, hydrated);
         }
+
+        setCourses(allCourses);
         setLessons(lessonsMap);
       } catch (error) {
-        console.error("Failed to initialize database:", error);
+        console.error("Failed to initialize Echo Studio:", error);
       } finally {
         setIsLoading(false);
       }
@@ -41,160 +46,120 @@ export default function App() {
     init();
   }, []);
 
-  // Load audio URL when lesson is selected
+  // Keep the library's copy of the active lesson in sync when the player
+  // mutates it (practised/difficult flags, resume position).
   useEffect(() => {
-    const loadAudio = async () => {
-      if (selectedLesson) {
-        if (selectedLesson.audioUrl) {
-          setAudioUrl(selectedLesson.audioUrl);
-        } else {
-          // Try to load from storage
-          const asset = await getAsset(selectedLesson.id, "audio");
-          if (asset) {
-            const url = URL.createObjectURL(asset.blob);
-            setAudioUrl(url);
-          }
-        }
+    if (!controller.lesson) return;
+    const updated = controller.lesson;
+    setLessons((prev) => {
+      const courseLessons = prev.get(updated.courseId);
+      if (!courseLessons) return prev;
+      const next = new Map(prev);
+      next.set(
+        updated.courseId,
+        courseLessons.map((l) => (l.id === updated.id ? updated : l))
+      );
+      return next;
+    });
+  }, [controller.lesson]);
+
+  const handleSelectLesson = useCallback(
+    async (lesson: Lesson) => {
+      const audioUrl = await resolveLessonAudioUrl(lesson);
+      if (!audioUrl) {
+        setImportMessage(`"${lesson.title}" has no playable audio for this lesson.`);
+        return;
       }
-    };
+      controller.loadLesson(lesson, audioUrl);
+      setView("player");
+    },
+    [controller]
+  );
 
-    loadAudio();
-  }, [selectedLesson]);
-
-  const handleImport = async (file: File) => {
+  const handleImport = useCallback(async (file: File) => {
     setIsImporting(true);
-    setImportError("");
+    setImportMessage("");
 
     try {
       const result = await importZipFile(file);
+      const hydratedLessons = await hydrateLessonsArtwork(result.lessons);
 
-      // Refresh courses and lessons
       setCourses((prev) => {
-        const updated = prev.map((c) => (c.id === result.course.id ? result.course : c));
-        if (!updated.find((c) => c.id === result.course.id)) {
-          return [...updated, result.course];
-        }
-        return updated;
+        const exists = prev.some((c) => c.id === result.course.id);
+        return exists
+          ? prev.map((c) => (c.id === result.course.id ? result.course : c))
+          : [...prev, result.course];
       });
 
-      // Update lessons map
       setLessons((prev) => {
-        const updated = new Map(prev);
-        updated.set(result.course.id, result.lessons);
-        return updated;
+        const next = new Map(prev);
+        next.set(result.course.id, hydratedLessons);
+        return next;
       });
 
-      // Show success message
-      const successMessage = `Imported ${result.progress.imported}/${result.progress.total} lessons`;
-      if (Object.keys(result.errors).length > 0) {
-        const errorMessage = Object.entries(result.errors)
-          .slice(0, 2)
-          .map(([folder, error]) => `${folder}: ${error}`)
-          .join("; ");
-        setImportError(`${successMessage}. Errors: ${errorMessage}`);
+      const parts = [`Imported ${result.progress.imported} of ${result.progress.total} lessons`];
+      const errorCount = Object.keys(result.errors).length;
+      if (errorCount > 0) {
+        parts.push(`${errorCount} lesson${errorCount > 1 ? "s" : ""} couldn't be imported`);
       }
-
-      // Select first lesson if available
-      if (result.lessons.length > 0) {
-        setSelectedLesson(result.lessons[0]);
-      }
+      setImportMessage(parts.join(" · "));
     } catch (error) {
-      setImportError(`Import failed: ${String(error)}`);
+      setImportMessage(`Import failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsImporting(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!importMessage) return;
+    const id = window.setTimeout(() => setImportMessage(""), 6000);
+    return () => window.clearTimeout(id);
+  }, [importMessage]);
 
   if (isLoading) {
     return (
       <div className="w-full h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-300">Loading Echo Studio...</p>
+          <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-slate-400 text-sm">Loading Echo Studio…</p>
         </div>
       </div>
     );
   }
 
+  const showPlayer = view === "player" && controller.lesson;
+
   return (
-    <div className="w-full h-screen bg-slate-950 flex">
-      {/* Sidebar */}
-      {selectedLesson ? (
-        <div className="hidden md:flex md:w-80 flex-col border-r border-slate-700 bg-slate-900">
-          <button
-            onClick={() => setSelectedLesson(null)}
-            className="px-4 py-3 text-left hover:bg-slate-800 border-b border-slate-700 font-medium flex items-center gap-2"
-          >
-            <X className="w-4 h-4" />
-            Back to Library
-          </button>
-          {selectedLesson && (
-            <div className="p-4 flex-1 overflow-y-auto">
-              {selectedLesson.thumbnailUrl && (
-                <img
-                  src={selectedLesson.thumbnailUrl}
-                  alt={selectedLesson.title}
-                  className="w-full h-48 rounded-lg object-cover mb-4"
-                />
-              )}
-              <h2 className="font-bold text-lg mb-2">{selectedLesson.title}</h2>
-              <p className="text-sm text-slate-400 mb-4">{selectedLesson.channel}</p>
-              <div className="space-y-2 text-sm">
-                <p>
-                  <span className="text-slate-400">Cues:</span> {selectedLesson.transcriptCues.length}
-                </p>
-                <p>
-                  <span className="text-slate-400">Duration:</span>{" "}
-                  {Math.round(selectedLesson.durationSeconds / 60)} min
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="w-full md:w-2/3 md:border-r md:border-slate-700 transition-all">
+    <div className="w-full h-screen bg-slate-950 text-slate-100 overflow-hidden relative">
+      <div className={showPlayer ? "hidden" : "w-full h-full flex flex-col"}>
+        <div className="flex-1 overflow-hidden">
           <Library
             courses={courses}
             lessons={lessons}
-            onSelectLesson={setSelectedLesson}
+            onSelectLesson={handleSelectLesson}
             onImport={handleImport}
-            onSelectCourse={() => {}}
           />
-          {importError && (
-            <div className="fixed bottom-4 left-4 right-4 md:right-auto md:w-96 bg-red-900 text-red-100 p-4 rounded-lg">
-              {importError}
-            </div>
-          )}
-          {isImporting && (
-            <div className="fixed bottom-4 left-4 right-4 md:right-auto md:w-96 bg-blue-900 text-blue-100 p-4 rounded-lg">
-              Importing...
-            </div>
-          )}
         </div>
-      )}
 
-      {/* Main Content */}
-      {selectedLesson && audioUrl ? (
-        <div className="flex-1 flex flex-col md:w-1/3">
-          <div className="md:hidden p-4 border-b border-slate-700 flex items-center justify-between">
-            <button
-              onClick={() => setSelectedLesson(null)}
-              className="text-violet-400 hover:text-violet-300"
-            >
-              ← Back
-            </button>
-            <h3 className="font-semibold text-sm truncate px-2">{selectedLesson.title}</h3>
-            <div className="w-8" />
+        {controller.lesson && (
+          <MiniPlayer controller={controller} onExpand={() => setView("player")} />
+        )}
+
+        {(isImporting || importMessage) && (
+          <div
+            className={[
+              "fixed left-1/2 -translate-x-1/2 z-50 max-w-[90vw] px-4 py-2.5 rounded-full bg-slate-800 border border-white/10 text-sm text-slate-200 shadow-lg transition-[bottom]",
+              controller.lesson ? "bottom-20" : "bottom-4",
+            ].join(" ")}
+          >
+            {isImporting ? "Importing lessons…" : importMessage}
           </div>
-          <Player lesson={selectedLesson} audioUrl={audioUrl} />
-        </div>
-      ) : (
-        <div className="hidden md:flex flex-1 items-center justify-center bg-gradient-to-br from-slate-900 to-slate-950">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold mb-2">Welcome to Echo Studio</h2>
-            <p className="text-slate-400 mb-6">Select a lesson to begin practising</p>
-            <p className="text-sm text-slate-500">Or import a ZIP file to add new content</p>
-          </div>
+        )}
+      </div>
+
+      {showPlayer && (
+        <div className="absolute inset-0">
+          <Player controller={controller} onBack={() => setView("library")} />
         </div>
       )}
     </div>

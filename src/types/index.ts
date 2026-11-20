@@ -3,6 +3,8 @@ export interface TranscriptCue {
   startTime: number;
   endTime: number;
   text: string;
+  practised?: boolean;
+  difficult?: boolean;
 }
 
 export interface Lesson {
@@ -24,6 +26,7 @@ export interface Lesson {
   importedAt: number;
   lastPlayedAt?: number;
   lastPlayedPosition?: number;
+  lastCueIndex?: number;
   practisedCount: number;
   isCompleted: boolean;
   tags: string[];
@@ -58,3 +61,19 @@ export interface ImportProgress {
   failed: number;
   warnings: string[];
 }
+
+export type PlaybackMode = "manual" | "automatic" | "continuous";
+
+export type PlaybackStatus =
+  | "idle"
+  | "loading"
+  | "playing"
+  | "paused"
+  | "pending-advance"
+  | "ended";
+
+export const LEAD_IN_OPTIONS = [0, 0.25, 0.5, 1, 2] as const;
+export type LeadInSeconds = (typeof LEAD_IN_OPTIONS)[number];
+
+export const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
+export type PlaybackSpeed = (typeof SPEED_OPTIONS)[number];

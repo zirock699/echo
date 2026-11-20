@@ -1,28 +1,45 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Course, Lesson } from "../types";
-import { Search, Upload } from "lucide-react";
+import { Search, UploadCloud, ChevronRight, Check } from "lucide-react";
+
+function formatDuration(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.round(totalSeconds % 60);
+  if (minutes === 0) return `${seconds}s`;
+  return `${minutes} min${seconds > 0 ? ` ${seconds}s` : ""}`;
+}
 
 interface LibraryProps {
   courses: Course[];
   lessons: Map<string, Lesson[]>;
   onSelectLesson: (lesson: Lesson) => void;
   onImport: (file: File) => void;
-  onSelectCourse: (course: Course) => void;
 }
 
-export const Library = ({
-  courses,
-  lessons,
-  onSelectLesson,
-  onImport,
-}: LibraryProps) => {
+export const Library = ({ courses, lessons, onSelectLesson, onImport }: LibraryProps) => {
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredCourses = courses.filter(
-    (c) =>
-      c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()))
+  const allLessons = useMemo(() => Array.from(lessons.values()).flat(), [lessons]);
+
+  const continueListening = useMemo(
+    () =>
+      allLessons
+        .filter((l) => l.lastPlayedAt && !l.isCompleted)
+        .sort((a, b) => (b.lastPlayedAt || 0) - (a.lastPlayedAt || 0))
+        .slice(0, 6),
+    [allLessons]
   );
+
+  const query = searchQuery.trim().toLowerCase();
+  const filteredCourses = courses.filter((c) => {
+    if (!query) return true;
+    if (c.title.toLowerCase().includes(query)) return true;
+    if (c.tags.some((t) => t.toLowerCase().includes(query))) return true;
+    const courseLessons = lessons.get(c.id) || [];
+    return courseLessons.some(
+      (l) => l.title.toLowerCase().includes(query) || l.channel?.toLowerCase().includes(query)
+    );
+  });
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -33,139 +50,197 @@ export const Library = ({
   };
 
   return (
-    <div className="w-full h-full bg-slate-950 flex flex-col">
+    <div className="w-full h-full flex flex-col bg-slate-950">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-slate-900 border-b border-slate-700 p-4">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-2xl font-bold mb-4">Echo Studio</h1>
+      <div className="shrink-0 border-b border-white/5 bg-slate-950/95 backdrop-blur-sm px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-xl font-semibold text-white tracking-tight">Echo Studio</h1>
+          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium cursor-pointer transition active:scale-95">
+            <UploadCloud className="w-4 h-4" />
+            Import
+            <input type="file" accept=".zip" onChange={handleFileUpload} className="hidden" />
+          </label>
+        </div>
 
-          <div className="flex gap-2 mb-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search courses..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:border-violet-500 text-sm"
-              />
-            </div>
-
-            <label className="px-4 py-2 bg-violet-600 rounded-lg font-medium cursor-pointer hover:bg-violet-700 transition flex items-center gap-2">
-              <Upload className="w-4 h-4" />
-              <span>Import</span>
-              <input
-                type="file"
-                accept=".zip"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-            </label>
-          </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <input
+            type="text"
+            placeholder="Search courses and lessons"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-violet-500/60 focus:bg-white/[0.07] transition"
+          />
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto p-4">
-          {filteredCourses.length === 0 ? (
-            <div className="text-center py-12">
-              <h2 className="text-lg font-semibold mb-2">No courses found</h2>
-              <p className="text-slate-400">Import a ZIP file to get started</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredCourses.map((course) => (
-                <CourseCard
-                  key={course.id}
-                  course={course}
-                  lessonsInCourse={lessons.get(course.id) || []}
-                  onSelectLesson={onSelectLesson}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        {courses.length === 0 ? (
+          <EmptyLibrary />
+        ) : (
+          <div className="px-4 py-5 space-y-7">
+            {continueListening.length > 0 && !query && (
+              <section>
+                <h2 className="text-sm font-semibold text-slate-300 mb-3">Continue listening</h2>
+                <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 snap-x">
+                  {continueListening.map((lesson) => (
+                    <button
+                      key={lesson.id}
+                      onClick={() => onSelectLesson(lesson)}
+                      className="shrink-0 w-36 text-left snap-start group"
+                    >
+                      <div className="w-36 h-36 rounded-xl overflow-hidden bg-slate-800 mb-2 relative">
+                        {lesson.thumbnailUrl ? (
+                          <img
+                            src={lesson.thumbnailUrl}
+                            alt=""
+                            className="w-full h-full object-cover group-hover:scale-105 transition"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-violet-700 to-fuchsia-700" />
+                        )}
+                        {lesson.transcriptCues.length > 0 && (
+                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/40">
+                            <div
+                              className="h-full bg-violet-400"
+                              style={{
+                                width: `${Math.round(
+                                  (lesson.practisedCount / lesson.transcriptCues.length) * 100
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium text-white truncate">{lesson.title}</p>
+                      <p className="text-xs text-slate-500 truncate">{lesson.channel}</p>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section>
+              <h2 className="text-sm font-semibold text-slate-300 mb-3">
+                {query ? "Results" : "Your courses"}
+              </h2>
+              {filteredCourses.length === 0 ? (
+                <div className="text-center py-10">
+                  <p className="text-slate-400 text-sm">No matches for "{searchQuery}"</p>
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="mt-2 text-violet-400 text-sm hover:underline"
+                  >
+                    Clear search
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredCourses.map((course) => (
+                    <CourseRow
+                      key={course.id}
+                      course={course}
+                      lessonsInCourse={lessons.get(course.id) || []}
+                      onSelectLesson={onSelectLesson}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-interface CourseCardProps {
+const EmptyLibrary = () => (
+  <div className="flex flex-col items-center justify-center text-center px-8 py-20">
+    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center mb-4">
+      <UploadCloud className="w-7 h-7 text-white" />
+    </div>
+    <h2 className="text-lg font-semibold text-white mb-1.5">Your library is empty</h2>
+    <p className="text-sm text-slate-400 max-w-xs">
+      Import a ZIP file produced by your lesson tool to start building your speech-shadowing
+      library.
+    </p>
+  </div>
+);
+
+interface CourseRowProps {
   course: Course;
   lessonsInCourse: Lesson[];
   onSelectLesson: (lesson: Lesson) => void;
 }
 
-const CourseCard = ({
-  course,
-  lessonsInCourse,
-  onSelectLesson,
-}: CourseCardProps) => {
-  const [showLessons, setShowLessons] = useState(false);
+const CourseRow = ({ course, lessonsInCourse, onSelectLesson }: CourseRowProps) => {
+  const [expanded, setExpanded] = useState(false);
   const thumbnail = lessonsInCourse[0]?.thumbnailUrl;
-  const progress = lessonsInCourse.length > 0
-    ? Math.round((lessonsInCourse.filter((l) => l.isCompleted).length / lessonsInCourse.length) * 100)
-    : 0;
+  const completed = lessonsInCourse.filter((l) => l.isCompleted).length;
+  const progress = lessonsInCourse.length > 0 ? completed / lessonsInCourse.length : 0;
 
   return (
-    <div className="bg-slate-800 rounded-lg overflow-hidden border border-slate-700 hover:border-slate-600 transition">
-      {/* Course Header */}
+    <div className="rounded-xl bg-white/[0.03] border border-white/5 overflow-hidden">
       <button
-        onClick={() => setShowLessons(!showLessons)}
-        className="w-full text-left"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-3 p-3 hover:bg-white/[0.04] transition text-left"
       >
-        <div className="flex gap-4 p-4">
+        <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-800 shrink-0">
           {thumbnail ? (
-            <img
-              src={thumbnail}
-              alt={course.title}
-              className="w-16 h-16 rounded object-cover flex-shrink-0"
-            />
+            <img src={thumbnail} alt="" className="w-full h-full object-cover" />
           ) : (
-            <div className="w-16 h-16 rounded bg-slate-700 flex-shrink-0" />
+            <div className="w-full h-full bg-gradient-to-br from-violet-700 to-fuchsia-700" />
           )}
-
-          <div className="flex-1">
-            <h3 className="font-semibold mb-1">{course.title}</h3>
-            <p className="text-sm text-slate-400 mb-2">
-              {lessonsInCourse.length} {lessonsInCourse.length === 1 ? "lesson" : "lessons"}
-            </p>
-
-            {lessonsInCourse.length > 0 && (
-              <div className="w-full bg-slate-700 rounded-full h-1">
-                <div
-                  className="bg-violet-600 h-1 rounded-full transition"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            )}
-          </div>
         </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-white truncate text-sm">{course.title}</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {lessonsInCourse.length} {lessonsInCourse.length === 1 ? "lesson" : "lessons"}
+            {completed > 0 && ` · ${completed} completed`}
+          </p>
+          {lessonsInCourse.length > 0 && (
+            <div className="w-full bg-white/5 rounded-full h-1 mt-1.5 max-w-[160px]">
+              <div
+                className="bg-violet-500 h-1 rounded-full transition-[width]"
+                style={{ width: `${progress * 100}%` }}
+              />
+            </div>
+          )}
+        </div>
+
+        <ChevronRight
+          className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
+        />
       </button>
 
-      {/* Lessons List */}
-      {showLessons && lessonsInCourse.length > 0 && (
-        <div className="border-t border-slate-700 bg-slate-900 max-h-64 overflow-y-auto">
-          {lessonsInCourse.map((lesson) => (
-            <button
-              key={lesson.id}
-              onClick={() => onSelectLesson(lesson)}
-              className="w-full text-left px-4 py-3 border-b border-slate-700 last:border-0 hover:bg-slate-800 transition flex items-start gap-3"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm truncate">{lesson.title}</p>
-                <p className="text-xs text-slate-400">
-                  {lesson.durationSeconds > 0
-                    ? `${Math.round(lesson.durationSeconds / 60)} min`
-                    : "Unknown duration"}
-                </p>
-              </div>
-              {lesson.isCompleted && (
-                <span className="text-xs bg-green-600 px-2 py-1 rounded">Done</span>
-              )}
-            </button>
-          ))}
+      {expanded && (
+        <div className="border-t border-white/5">
+          {lessonsInCourse.length === 0 ? (
+            <p className="px-4 py-3 text-xs text-slate-500">No lessons in this course.</p>
+          ) : (
+            lessonsInCourse.map((lesson) => (
+              <button
+                key={lesson.id}
+                onClick={() => onSelectLesson(lesson)}
+                className="w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-white/[0.04] transition border-b border-white/[0.03] last:border-0"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-slate-200 truncate">{lesson.title}</p>
+                  <p className="text-xs text-slate-500">
+                    {lesson.durationSeconds > 0 ? formatDuration(lesson.durationSeconds) : "Duration unknown"}
+                    {lesson.transcriptCues.length === 0 && " · no transcript"}
+                  </p>
+                </div>
+                {lesson.isCompleted && (
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                    <Check className="w-3 h-3" />
+                  </span>
+                )}
+              </button>
+            ))
+          )}
         </div>
       )}
     </div>
