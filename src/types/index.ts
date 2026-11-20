@@ -77,3 +77,14 @@ export type LeadInSeconds = (typeof LEAD_IN_OPTIONS)[number];
 
 export const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 export type PlaybackSpeed = (typeof SPEED_OPTIONS)[number];
+
+export type CourseStatus = "pinned" | "in-progress" | "not-started" | "completed";
+export type SortOption = "recent" | "alphabetical" | "progress" | "date-added";
+
+export function getCourseStatus(course: Course, lessons: Lesson[]): CourseStatus {
+  if (course.isPinned) return "pinned";
+  if (course.completedCount === course.lessonsCount && course.lessonsCount > 0)
+    return "completed";
+  if (lessons.some((l) => l.lastPlayedAt)) return "in-progress";
+  return "not-started";
+}
