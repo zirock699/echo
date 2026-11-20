@@ -1,4 +1,5 @@
 import type { TranscriptCue } from "../../types";
+import { cn } from "../../utils/cn";
 
 interface PhraseDisplayProps {
   cues: TranscriptCue[];
@@ -38,20 +39,22 @@ export const PhraseDisplay = ({ cues, currentIndex, onSelect, showText }: Phrase
             <button
               key={cue.id}
               onClick={() => onSelect(absoluteIndex)}
-              className={[
-                "text-center transition-all duration-300 ease-out max-w-full px-2",
+              className={cn(
+                "text-center max-w-full px-2",
+                "transition-all duration-500 ease-out",
+                "hover:scale-105 focus-visible:scale-105 focus-visible:ring-2 focus-visible:ring-violet-400",
                 isCurrent
-                  ? "text-white font-semibold"
+                  ? "text-white font-semibold animate-in fade-in zoom-in-95 duration-300"
                   : distance === 1
                   ? "text-slate-500 font-normal"
                   : "text-slate-600 font-normal",
-              ].join(" ")}
+              )}
               style={{
                 fontSize: isCurrent
                   ? "clamp(1.375rem, 5.5vw, 2.25rem)"
                   : "clamp(0.9rem, 3.4vw, 1.15rem)",
                 lineHeight: 1.35,
-                opacity: isCurrent ? 1 : distance === 1 ? 0.65 : 0.35,
+                opacity: isCurrent ? 1 : distance === 1 ? 0.75 : 0.50,
               }}
             >
               {showText ? cue.text : isCurrent ? "●  ●  ●" : ""}

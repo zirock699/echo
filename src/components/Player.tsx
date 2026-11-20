@@ -6,6 +6,8 @@ import { ProgressBars } from "./player/ProgressBars";
 import { PlayerControls } from "./player/PlayerControls";
 import { PhraseQueue } from "./player/PhraseQueue";
 import { PlaybackSettingsSheet } from "./player/PlaybackSettingsSheet";
+import { PlayerSkeleton } from "./player/PlayerSkeleton";
+import { KeyboardHint } from "./ui/KeyboardHint";
 
 interface PlayerProps {
   controller: PlaybackController;
@@ -16,6 +18,13 @@ export const Player = ({ controller, onBack }: PlayerProps) => {
   const [queueOpen, setQueueOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showText, setShowText] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (controller.lesson && controller.status !== 'loading') {
+      setIsLoading(false);
+    }
+  }, [controller.lesson, controller.status]);
 
   const { lesson } = controller;
 
@@ -66,11 +75,15 @@ export const Player = ({ controller, onBack }: PlayerProps) => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [controller]);
 
-  if (!lesson) return null;
+  if (isLoading || !lesson) {
+    if (isLoading) return <PlayerSkeleton />;
+    return null;
+  }
 
   const cues = lesson.transcriptCues;
 
   return (
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
     <div className="relative w-full h-full flex flex-col overflow-hidden bg-slate-950">
       {/* Atmospheric background */}
       {controller.thumbnailUrl && (
@@ -90,7 +103,7 @@ export const Player = ({ controller, onBack }: PlayerProps) => {
         <button
           onClick={onBack}
           aria-label="Back to library"
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 text-slate-300 transition"
+          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 text-slate-300 transition focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
         >
           <ChevronDown className="w-5 h-5" />
         </button>
@@ -106,14 +119,14 @@ export const Player = ({ controller, onBack }: PlayerProps) => {
           <button
             onClick={() => setShowText((v) => !v)}
             aria-label={showText ? "Hide text" : "Show text"}
-            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 text-slate-300 transition"
+            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 text-slate-300 transition focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
           >
             {showText ? <Eye className="w-[18px] h-[18px]" /> : <EyeOff className="w-[18px] h-[18px]" />}
           </button>
           <button
             onClick={() => setQueueOpen(true)}
             aria-label="Open phrase queue"
-            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 text-slate-300 transition"
+            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 text-slate-300 transition focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
           >
             <ListMusic className="w-[18px] h-[18px]" />
           </button>
@@ -165,6 +178,13 @@ export const Player = ({ controller, onBack }: PlayerProps) => {
           onToggleLoop={controller.toggleLoop}
           onOpenSettings={() => setSettingsOpen(true)}
         />
+        <div className="relative z-10 flex items-center justify-center gap-3 flex-wrap px-4 pb-2 text-xs">
+          <KeyboardHint keys={['Space']} label="Play/Pause" />
+          <KeyboardHint keys={['←', '→']} label="Prev/Next" />
+          <KeyboardHint keys={['R']} label="Replay" />
+          <KeyboardHint keys={['L']} label="Loop" />
+          <KeyboardHint keys={['Q']} label="Queue" />
+        </div>
       </div>
 
       <PhraseQueue
@@ -186,6 +206,7 @@ export const Player = ({ controller, onBack }: PlayerProps) => {
         onRateChange={controller.setRate}
         onLeadInChange={controller.setLeadIn}
       />
+    </div>
     </div>
   );
 };

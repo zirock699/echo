@@ -32,9 +32,9 @@ export const PlaybackSettingsSheet = ({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full sm:max-w-sm sm:rounded-2xl rounded-t-2xl bg-slate-900 border border-white/10 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] max-h-[85vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center animate-in fade-in duration-200">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full sm:max-w-sm sm:rounded-2xl rounded-t-2xl bg-slate-900 border border-white/10 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom-8 sm:zoom-in-95 duration-300">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-white">Practice settings</h3>
           <button

@@ -1,5 +1,6 @@
+import { useState } from "react";
 import type { TranscriptCue } from "../../types";
-import { formatTime } from "../../services/srtParser";
+import { formatTime } from "../../utils/formatters";
 
 interface ProgressBarsProps {
   cue: TranscriptCue | null;
@@ -16,6 +17,8 @@ export const ProgressBars = ({
   onSeekPhrase,
   onSeekRecording,
 }: ProgressBarsProps) => {
+  const [phraseHoverPos, setPhraseHoverPos] = useState<number | null>(null);
+
   const phraseStart = cue?.startTime ?? 0;
   const phraseEnd = cue?.endTime ?? Math.max(duration, 0.001);
   const phraseLen = Math.max(phraseEnd - phraseStart, 0.001);
@@ -24,14 +27,22 @@ export const ProgressBars = ({
   const recordingPos = duration > 0 ? clamp01(currentTime / duration) : 0;
 
   return (
-    <div className="w-full max-w-lg mx-auto flex flex-col gap-3">
+    <div className="w-full max-w-lg mx-auto flex flex-col gap-4">
       {/* Phrase timeline — prominent */}
-      <div>
+      <div className="relative">
         <div className="flex items-center justify-between mb-1.5 text-xs text-slate-400 tabular-nums">
           <span>{cue ? formatTime(Math.max(0, currentTime - phraseStart)) : formatTime(currentTime)}</span>
           <span className="text-slate-500">phrase</span>
           <span>{cue ? formatTime(phraseLen) : formatTime(duration)}</span>
         </div>
+        {phraseHoverPos !== null && (
+          <div
+            className="absolute -top-8 transform -translate-x-1/2 px-2 py-1 bg-slate-800 border border-white/10 rounded text-xs text-white font-medium shadow-lg pointer-events-none"
+            style={{ left: `${phraseHoverPos * 100}%` }}
+          >
+            {formatTime((phraseHoverPos * phraseLen) + phraseStart)}
+          </div>
+        )}
         <input
           type="range"
           min={0}
@@ -42,7 +53,13 @@ export const ProgressBars = ({
             const frac = Number(e.target.value) / 1000;
             onSeekPhrase(phraseStart + frac * phraseLen);
           }}
-          className="w-full h-2 text-violet-400 cursor-pointer"
+          onMouseMove={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const pos = (e.clientX - rect.left) / rect.width;
+            setPhraseHoverPos(Math.max(0, Math.min(1, pos)));
+          }}
+          onMouseLeave={() => setPhraseHoverPos(null)}
+          className="w-full h-2 text-violet-400 cursor-pointer hover:scale-y-110 transition-transform"
           aria-label="Phrase position"
         />
       </div>

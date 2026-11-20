@@ -7,6 +7,9 @@ import { Library } from "./components/Library";
 import { Player } from "./components/Player";
 import { MiniPlayer } from "./components/MiniPlayer";
 import { usePlaybackController } from "./hooks/usePlaybackController";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { ToastContainer } from "./components/ui/ToastContainer";
+import { cn } from "./utils/cn";
 import "./styles/globals.css";
 
 type View = "library" | "player";
@@ -15,7 +18,6 @@ export default function App() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [lessons, setLessons] = useState<Map<string, Lesson[]>>(new Map());
   const [view, setView] = useState<View>("library");
-  const [isImporting, setIsImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
 
@@ -77,7 +79,6 @@ export default function App() {
   );
 
   const handleImport = useCallback(async (file: File) => {
-    setIsImporting(true);
     setImportMessage("");
 
     try {
@@ -105,8 +106,6 @@ export default function App() {
       setImportMessage(parts.join(" · "));
     } catch (error) {
       setImportMessage(`Import failed: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setIsImporting(false);
     }
   }, []);
 
@@ -127,41 +126,41 @@ export default function App() {
     );
   }
 
-  const showPlayer = view === "player" && controller.lesson;
+  const showPlayer = view === "player";
 
   return (
-    <div className="w-full h-screen bg-slate-950 text-slate-100 overflow-hidden relative">
-      <div className={showPlayer ? "hidden" : "w-full h-full flex flex-col"}>
-        <div className="flex-1 overflow-hidden">
-          <Library
-            courses={courses}
-            lessons={lessons}
-            onSelectLesson={handleSelectLesson}
-            onImport={handleImport}
-          />
+    <ErrorBoundary>
+      <div className="w-full h-screen bg-slate-950 text-slate-100 overflow-hidden relative">
+        {/* Library view with fade transition */}
+        <div
+          className={cn(
+            "w-full h-full flex flex-col transition-opacity duration-300",
+            showPlayer ? "opacity-0 pointer-events-none" : "opacity-100"
+          )}
+        >
+          <div className="flex-1 overflow-hidden">
+            <Library
+              courses={courses}
+              lessons={lessons}
+              onSelectLesson={handleSelectLesson}
+              onImport={handleImport}
+            />
+          </div>
+
+          {controller.lesson && (
+            <MiniPlayer controller={controller} onExpand={() => setView("player")} />
+          )}
         </div>
 
-        {controller.lesson && (
-          <MiniPlayer controller={controller} onExpand={() => setView("player")} />
-        )}
-
-        {(isImporting || importMessage) && (
-          <div
-            className={[
-              "fixed left-1/2 -translate-x-1/2 z-50 max-w-[90vw] px-4 py-2.5 rounded-full bg-slate-800 border border-white/10 text-sm text-slate-200 shadow-lg transition-[bottom]",
-              controller.lesson ? "bottom-20" : "bottom-4",
-            ].join(" ")}
-          >
-            {isImporting ? "Importing lessons…" : importMessage}
+        {/* Player view with slide up transition */}
+        {showPlayer && controller.lesson && (
+          <div className="absolute inset-0 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <Player controller={controller} onBack={() => setView("library")} />
           </div>
         )}
-      </div>
 
-      {showPlayer && (
-        <div className="absolute inset-0">
-          <Player controller={controller} onBack={() => setView("library")} />
-        </div>
-      )}
-    </div>
+        <ToastContainer />
+      </div>
+    </ErrorBoundary>
   );
 }

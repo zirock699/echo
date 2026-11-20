@@ -43,7 +43,7 @@ export const PhraseQueue = ({
             key={cue.id}
             ref={isCurrent ? activeRef : undefined}
             className={[
-              "group flex items-start gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition",
+              "group flex items-start gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition animate-in fade-in duration-200",
               isCurrent ? "bg-violet-500/15" : "hover:bg-white/5",
             ].join(" ")}
             onClick={() => {
@@ -80,13 +80,13 @@ export const PhraseQueue = ({
                 }}
                 aria-label="Mark practised"
                 className={[
-                  "w-7 h-7 flex items-center justify-center rounded-full transition",
+                  "w-9 h-9 flex items-center justify-center rounded-full transition",
                   cue.practised
                     ? "bg-emerald-500/20 text-emerald-400"
                     : "text-slate-500 opacity-0 group-hover:opacity-100 hover:bg-white/10",
                 ].join(" ")}
               >
-                <Check className="w-3.5 h-3.5" />
+                <Check className="w-4 h-4" />
               </button>
               <button
                 onClick={(e) => {
@@ -95,13 +95,13 @@ export const PhraseQueue = ({
                 }}
                 aria-label="Mark difficult"
                 className={[
-                  "w-7 h-7 flex items-center justify-center rounded-full transition",
+                  "w-9 h-9 flex items-center justify-center rounded-full transition",
                   cue.difficult
                     ? "bg-amber-500/20 text-amber-400"
                     : "text-slate-500 opacity-0 group-hover:opacity-100 hover:bg-white/10",
                 ].join(" ")}
               >
-                <Flag className="w-3.5 h-3.5" />
+                <Flag className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -112,10 +112,10 @@ export const PhraseQueue = ({
 
   return (
     <div className="fixed inset-0 z-40 flex sm:justify-end">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
       {/* Mobile: bottom sheet */}
-      <div className="relative sm:hidden mt-auto w-full max-h-[75vh] bg-slate-900 border-t border-white/10 rounded-t-2xl flex flex-col">
+      <div className="relative sm:hidden mt-auto w-full max-h-[75vh] bg-slate-900 border-t border-white/10 rounded-t-2xl flex flex-col animate-in slide-in-from-bottom-8 duration-300">
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <div className="w-10 h-1 rounded-full bg-white/15 absolute left-1/2 -translate-x-1/2 top-2" />
           <h3 className="font-semibold text-white text-sm">Phrases</h3>
@@ -126,7 +126,7 @@ export const PhraseQueue = ({
         {renderList(activeRefMobile)}
       </div>
       {/* Desktop: right sidebar */}
-      <div className="relative hidden sm:flex sm:w-96 h-full bg-slate-900 border-l border-white/10 flex-col">
+      <div className="relative hidden sm:flex sm:w-96 h-full bg-slate-900 border-l border-white/10 flex-col animate-in slide-in-from-right-8 duration-300">
         <div className="flex items-center justify-between px-4 py-4 border-b border-white/5">
           <h3 className="font-semibold text-white text-sm">Phrases</h3>
           <button onClick={onClose} aria-label="Close" className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-slate-400">

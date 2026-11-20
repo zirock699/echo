@@ -1,6 +1,14 @@
 import { useMemo, useState } from "react";
-import type { Course, Lesson } from "../types";
-import { Search, UploadCloud, ChevronRight, Check } from "lucide-react";
+import type { Course, Lesson, CourseStatus, SortOption } from "../types";
+import { getCourseStatus } from "../types";
+import { Search, UploadCloud, ChevronRight, Check, Grid, List, Pin, Clock, CheckCircle2 } from "lucide-react";
+import { FilterPill } from "./ui/FilterPill";
+import { SortDropdown } from "./ui/SortDropdown";
+import { CourseCard } from "./CourseCard";
+import { EmptyState } from "./EmptyState";
+import { cn } from "../utils/cn";
+import { sortCourses, matchesSearch } from "../utils/sorting";
+import { formatRelativeTime } from "../utils/formatters";
 
 function formatDuration(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
@@ -18,6 +26,9 @@ interface LibraryProps {
 
 export const Library = ({ courses, lessons, onSelectLesson, onImport }: LibraryProps) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeFilters, setActiveFilters] = useState<Set<CourseStatus>>(new Set());
+  const [sortBy, setSortBy] = useState<SortOption>('recent');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   const allLessons = useMemo(() => Array.from(lessons.values()).flat(), [lessons]);
 
@@ -30,16 +41,23 @@ export const Library = ({ courses, lessons, onSelectLesson, onImport }: LibraryP
     [allLessons]
   );
 
-  const query = searchQuery.trim().toLowerCase();
-  const filteredCourses = courses.filter((c) => {
-    if (!query) return true;
-    if (c.title.toLowerCase().includes(query)) return true;
-    if (c.tags.some((t) => t.toLowerCase().includes(query))) return true;
-    const courseLessons = lessons.get(c.id) || [];
-    return courseLessons.some(
-      (l) => l.title.toLowerCase().includes(query) || l.channel?.toLowerCase().includes(query)
-    );
-  });
+  const filteredAndSorted = useMemo(() => {
+    let filtered = courses.filter(c => {
+      // Search filtering
+      const query = searchQuery.trim().toLowerCase();
+      if (query && !matchesSearch(c, query, lessons.get(c.id) || [])) return false;
+
+      // Status filtering
+      if (activeFilters.size > 0) {
+        const status = getCourseStatus(c, lessons.get(c.id) || []);
+        if (!activeFilters.has(status)) return false;
+      }
+
+      return true;
+    });
+
+    return sortCourses(filtered, sortBy, lessons);
+  }, [courses, searchQuery, activeFilters, sortBy, lessons]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -55,11 +73,87 @@ export const Library = ({ courses, lessons, onSelectLesson, onImport }: LibraryP
       <div className="shrink-0 border-b border-white/5 bg-slate-950/95 backdrop-blur-sm px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-semibold text-white tracking-tight">Echo Studio</h1>
-          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium cursor-pointer transition active:scale-95">
-            <UploadCloud className="w-4 h-4" />
-            Import
-            <input type="file" accept=".zip" onChange={handleFileUpload} className="hidden" />
-          </label>
+          <div className="flex items-center gap-2">
+            <SortDropdown value={sortBy} onChange={setSortBy} />
+            <div className="hidden md:flex items-center gap-1 bg-slate-800 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  'p-2 rounded transition-colors',
+                  viewMode === 'list' ? 'bg-violet-500/20 text-violet-400' : 'text-slate-400 hover:text-white'
+                )}
+                aria-label="List view"
+              >
+                <List className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                className={cn(
+                  'p-2 rounded transition-colors',
+                  viewMode === 'grid' ? 'bg-violet-500/20 text-violet-400' : 'text-slate-400 hover:text-white'
+                )}
+                aria-label="Grid view"
+              >
+                <Grid className="w-4 h-4" />
+              </button>
+            </div>
+            <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium cursor-pointer transition active:scale-95">
+              <UploadCloud className="w-4 h-4" />
+              Import
+              <input type="file" accept=".zip" onChange={handleFileUpload} className="hidden" />
+            </label>
+          </div>
+        </div>
+
+        {/* Filter Pills */}
+        <div className="flex items-center gap-2 mb-3 overflow-x-auto pb-1 -mx-4 px-4 snap-x">
+          <FilterPill
+            label="Pinned"
+            active={activeFilters.has('pinned')}
+            count={courses.filter(c => c.isPinned).length}
+            onClick={() => {
+              const newFilters = new Set(activeFilters);
+              if (newFilters.has('pinned')) newFilters.delete('pinned');
+              else newFilters.add('pinned');
+              setActiveFilters(newFilters);
+            }}
+            icon={<Pin className="w-3.5 h-3.5" />}
+          />
+          <FilterPill
+            label="In Progress"
+            active={activeFilters.has('in-progress')}
+            count={courses.filter(c => getCourseStatus(c, lessons.get(c.id) || []) === 'in-progress').length}
+            onClick={() => {
+              const newFilters = new Set(activeFilters);
+              if (newFilters.has('in-progress')) newFilters.delete('in-progress');
+              else newFilters.add('in-progress');
+              setActiveFilters(newFilters);
+            }}
+            icon={<Clock className="w-3.5 h-3.5" />}
+          />
+          <FilterPill
+            label="Not Started"
+            active={activeFilters.has('not-started')}
+            count={courses.filter(c => getCourseStatus(c, lessons.get(c.id) || []) === 'not-started').length}
+            onClick={() => {
+              const newFilters = new Set(activeFilters);
+              if (newFilters.has('not-started')) newFilters.delete('not-started');
+              else newFilters.add('not-started');
+              setActiveFilters(newFilters);
+            }}
+          />
+          <FilterPill
+            label="Completed"
+            active={activeFilters.has('completed')}
+            count={courses.filter(c => getCourseStatus(c, lessons.get(c.id) || []) === 'completed').length}
+            onClick={() => {
+              const newFilters = new Set(activeFilters);
+              if (newFilters.has('completed')) newFilters.delete('completed');
+              else newFilters.add('completed');
+              setActiveFilters(newFilters);
+            }}
+            icon={<CheckCircle2 className="w-3.5 h-3.5" />}
+          />
         </div>
 
         <div className="relative">
@@ -80,7 +174,7 @@ export const Library = ({ courses, lessons, onSelectLesson, onImport }: LibraryP
           <EmptyLibrary />
         ) : (
           <div className="px-4 py-5 space-y-7">
-            {continueListening.length > 0 && !query && (
+            {continueListening.length > 0 && !searchQuery && (
               <section>
                 <h2 className="text-sm font-semibold text-slate-300 mb-3">Continue listening</h2>
                 <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 snap-x">
@@ -123,21 +217,45 @@ export const Library = ({ courses, lessons, onSelectLesson, onImport }: LibraryP
 
             <section>
               <h2 className="text-sm font-semibold text-slate-300 mb-3">
-                {query ? "Results" : "Your courses"}
+                {searchQuery ? "Results" : activeFilters.size > 0 ? "Filtered courses" : "Your courses"}
               </h2>
-              {filteredCourses.length === 0 ? (
-                <div className="text-center py-10">
-                  <p className="text-slate-400 text-sm">No matches for "{searchQuery}"</p>
-                  <button
-                    onClick={() => setSearchQuery("")}
-                    className="mt-2 text-violet-400 text-sm hover:underline"
-                  >
-                    Clear search
-                  </button>
+              {filteredAndSorted.length === 0 ? (
+                <EmptyState
+                  icon={<UploadCloud className="w-7 h-7 text-violet-400" />}
+                  title="No courses found"
+                  description={
+                    searchQuery
+                      ? `No courses match "${searchQuery}"`
+                      : activeFilters.size > 0
+                      ? "Try adjusting your filters"
+                      : "Import a ZIP file to get started"
+                  }
+                  action={
+                    searchQuery || activeFilters.size > 0
+                      ? {
+                          label: "Clear filters",
+                          onClick: () => {
+                            setSearchQuery("");
+                            setActiveFilters(new Set());
+                          }
+                        }
+                      : undefined
+                  }
+                />
+              ) : viewMode === 'grid' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredAndSorted.map(course => (
+                    <CourseCard
+                      key={course.id}
+                      course={course}
+                      lessonsInCourse={lessons.get(course.id) || []}
+                      onSelectLesson={onSelectLesson}
+                    />
+                  ))}
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {filteredCourses.map((course) => (
+                  {filteredAndSorted.map((course) => (
                     <CourseRow
                       key={course.id}
                       course={course}
@@ -179,13 +297,26 @@ const CourseRow = ({ course, lessonsInCourse, onSelectLesson }: CourseRowProps) 
   const thumbnail = lessonsInCourse[0]?.thumbnailUrl;
   const completed = lessonsInCourse.filter((l) => l.isCompleted).length;
   const progress = lessonsInCourse.length > 0 ? completed / lessonsInCourse.length : 0;
+  const status = getCourseStatus(course, lessonsInCourse);
 
   return (
-    <div className="rounded-xl bg-white/[0.03] border border-white/5 overflow-hidden">
+    <div className={cn(
+      "rounded-xl border overflow-hidden transition-all",
+      "bg-white/[0.03] border-white/5 hover:border-white/10 hover:bg-white/[0.05]",
+      course.isPinned && "ring-1 ring-violet-500/20"
+    )}>
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-3 p-3 hover:bg-white/[0.04] transition text-left"
+        className="w-full flex items-center gap-3 p-3 text-left"
       >
+        {/* Pin indicator */}
+        {course.isPinned && (
+          <div className="shrink-0">
+            <Pin className="w-4 h-4 text-violet-400" fill="currentColor" />
+          </div>
+        )}
+
+        {/* Thumbnail */}
         <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-800 shrink-0">
           {thumbnail ? (
             <img src={thumbnail} alt="" className="w-full h-full object-cover" />
@@ -195,13 +326,21 @@ const CourseRow = ({ course, lessonsInCourse, onSelectLesson }: CourseRowProps) 
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-white truncate text-sm">{course.title}</p>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <div className="flex items-center gap-2 mb-1">
+            <p className="font-medium text-white truncate text-sm">{course.title}</p>
+            {status === 'completed' && (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            )}
+          </div>
+
+          <p className="text-xs text-slate-500 mb-1">
             {lessonsInCourse.length} {lessonsInCourse.length === 1 ? "lesson" : "lessons"}
             {completed > 0 && ` · ${completed} completed`}
+            {course.lastAccessedAt && ` · ${formatRelativeTime(course.lastAccessedAt)}`}
           </p>
+
           {lessonsInCourse.length > 0 && (
-            <div className="w-full bg-white/5 rounded-full h-1 mt-1.5 max-w-[160px]">
+            <div className="w-full bg-white/5 rounded-full h-1 max-w-[160px]">
               <div
                 className="bg-violet-500 h-1 rounded-full transition-[width]"
                 style={{ width: `${progress * 100}%` }}
@@ -211,7 +350,7 @@ const CourseRow = ({ course, lessonsInCourse, onSelectLesson }: CourseRowProps) 
         </div>
 
         <ChevronRight
-          className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
+          className={cn("w-4 h-4 text-slate-500 shrink-0 transition-transform", expanded && "rotate-90")}
         />
       </button>
 

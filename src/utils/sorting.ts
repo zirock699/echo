@@ -3,7 +3,7 @@ import type { Course, Lesson, SortOption } from "../types";
 export function sortCourses(
   courses: Course[],
   sortBy: SortOption,
-  lessons: Map<string, Lesson[]>
+  _lessons: Map<string, Lesson[]>
 ): Course[] {
   const sorted = [...courses];
 
