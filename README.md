@@ -23,6 +23,10 @@ The build creates a Worker at `dist/server/index.js`, embedding the browser asse
 
 `colorthief` is pinned in package.json; its browser bundle and licence are checked in for dependency-free browser execution.
 
+## ZIP import and courses
+
+Use **Library → Import** for ZIP packages containing audio, captions, artwork and metadata. See [ZIP import, course management, storage limits and verification](docs/ZIP_IMPORT.md). Existing lessons and collections are retained.
+
 ## Main files
 
 - `src/app.mjs`: views, importing, lesson settings, queue and event handling.

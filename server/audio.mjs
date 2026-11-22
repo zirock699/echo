@@ -1,4 +1,4 @@
-const AUDIO_TYPES=new Set(['audio/mpeg','audio/mp3','audio/mp4','audio/x-m4a','audio/aac','audio/wav','audio/x-wav','audio/wave','audio/ogg','audio/webm','audio/flac','audio/x-flac']);
+const AUDIO_TYPES=new Set(['audio/mpeg','audio/mp3','audio/mp4','audio/x-m4a','audio/aac','audio/wav','audio/x-wav','audio/wave','audio/ogg','audio/webm','audio/flac','audio/x-flac','image/jpeg','image/png','image/webp']);
 const MAX_AUDIO=50*1024*1024;
 const audioJSON=(data,status=200)=>Response.json(data,{status,headers:{'cache-control':'no-store'}});
 export async function handleAudio(request,env,owner){

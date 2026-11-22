@@ -1,0 +1,6 @@
+/** Practice recordings remain on this device and are not uploaded. */
+export class PracticeRecorder{
+ constructor(notify){this.notify=notify;this.url=null;this.recorder=null;this.stream=null;this.error='';this.requesting=false;this.disposed=false;}
+ async start(){if(this.requesting||this.recorder?.state==='recording')return;this.error='';if(!navigator.mediaDevices?.getUserMedia||!globalThis.MediaRecorder){this.error='Recording needs a supported browser and a secure connection.';this.notify();return;}try{this.requesting=true;this.notify();this.stream=await navigator.mediaDevices.getUserMedia({audio:true});if(this.disposed){this.stream.getTracks().forEach(t=>t.stop());return;}const chunks=[];this.recorder=new MediaRecorder(this.stream);this.recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};this.recorder.onstop=()=>{if(this.url)URL.revokeObjectURL(this.url);this.url=URL.createObjectURL(new Blob(chunks,{type:this.recorder.mimeType}));this.stream.getTracks().forEach(t=>t.stop());this.notify();};this.recorder.start();}catch{this.error='Microphone access was denied or unavailable. Check browser permissions and try again.';this.stream?.getTracks().forEach(t=>t.stop());}finally{this.requesting=false;this.notify();}}
+ stop(){if(this.recorder?.state==='recording')this.recorder.stop();}
+}

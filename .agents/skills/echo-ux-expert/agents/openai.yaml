@@ -1,0 +1,4 @@
+interface:
+  display_name: "Echo UX Expert"
+  short_description: "Design and refine Echo Studio with mobile-first UX"
+  default_prompt: "Use $echo-ux-expert to review and improve Echo Studio within the requested scope, preserving playback and transcript functionality."

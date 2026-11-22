@@ -25,7 +25,7 @@ export async function prepareAmbient(lesson,save){
  pending.add(key);let colours=[],source='fallback';
  try{
   const img=new Image();img.crossOrigin='anonymous';img.decoding='async';
-  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{img.src='';reject(Error('Thumbnail timeout'));},5000);img.onload=()=>{clearTimeout(timer);resolve();};img.onerror=()=>{clearTimeout(timer);reject(Error('Thumbnail unavailable'));};img.src=`https://i.ytimg.com/vi/${encodeURIComponent(lesson.videoId)}/hqdefault.jpg`;});
+  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{img.src='';reject(Error('Thumbnail timeout'));},5000);img.onload=()=>{clearTimeout(timer);resolve();};img.onerror=()=>{clearTimeout(timer);reject(Error('Thumbnail unavailable'));};img.src=lesson.thumbnail?.url||lesson.frame?.url||`https://i.ytimg.com/vi/${encodeURIComponent(lesson.videoId)}/hqdefault.jpg`;});
   colours=getPaletteSync(img,{colorCount:6,quality:15}).map(c=>c.hex());source='thumbnail';
  }catch{/* Colour extraction never blocks playback. */}
  try{save({version:VERSION,videoId:lesson.videoId,colours,source});}finally{pending.delete(key);}
