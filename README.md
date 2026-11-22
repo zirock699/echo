@@ -1,168 +1,41 @@
 # Echo Studio
 
-A beautiful, mobile-first speech-shadowing application for improving spoken English pronunciation, fluency, and confidence.
+An audio-first speech-shadowing app, with YouTube and private uploaded-audio playback, timestamped transcript import, phrase practice, progress, collections and British IPA guidance.
 
-## Features
+See [spec.md](spec.md) for the original specification, reference-driven redesign and confirmed updates. Latest mobile viewport rules take precedence.
 
-- ✅ **ZIP-based Lesson Importing** - Import pre-processed YouTube content with audio and transcripts
-- ✅ **Audio-First Player** - Large, readable transcript with synchronized audio playback
-- ✅ **Course Organization** - Organize lessons into courses with tagging and search
-- ✅ **Phrase Navigation** - Jump to any phrase, replay, and control playback speed
-- ✅ **Progress Tracking** - Track completed lessons and phrases
-- ✅ **Mobile Responsive** - Optimized for mobile (320px+) with desktop support
-- ✅ **Persistent Storage** - All data saved locally using IndexedDB
+## Run and verify
 
-## Architecture
+The browser uses locally vendored ESM assets. No install is required to run the checked-in code.
 
-**Frontend:**
-- React 18 + TypeScript
-- Tailwind CSS for styling
-- Lucide Icons for UI components
-
-**Storage:**
-- IndexedDB for local persistence (abstracted for D1 migration to ChatGPT Sites)
-
-**ZIP Import:**
-- JSZip for ZIP parsing and validation
-- Robust error handling with detailed feedback
-
-**Audio/Transcript:**
-- HTML5 Audio API for playback
-- SRT subtitle parsing with accurate timestamp synchronization
-
-## Project Structure
-
-```
-src/
-├── components/
-│   ├── Player.tsx        # Main audio player with transcript sync
-│   └── Library.tsx       # Course and lesson browser
-├── services/
-│   ├── storage.ts        # IndexedDB abstraction
-│   ├── zipImporter.ts    # ZIP file processing
-│   ├── srtParser.ts      # SRT parsing
-│   └── audioSync.ts      # Audio playback controller
-├── types/
-│   └── index.ts          # TypeScript interfaces
-├── styles/
-│   └── globals.css       # Tailwind setup
-├── App.tsx               # Main app component
-└── main.tsx              # React entry point
+```sh
+node scripts/dev.mjs
 ```
 
-## ZIP File Format
+Open http://127.0.0.1:4173. This development server provides disposable in-memory D1 and audio storage. It does not connect to production data.
 
-Expected structure produced by the Python importer:
-
-```
-echo_media/
-├── manifest.json
-├── video_id_001/
-│   ├── audio.mp3
-│   ├── transcript.srt
-│   ├── thumbnail.jpg
-│   ├── frame.jpg (optional)
-│   └── metadata.json
-└── video_id_002/
-    ├── audio.mp3
-    ├── transcript.srt
-    ├── thumbnail.jpg
-    └── metadata.json
-```
-
-## Getting Started
-
-### Development
-
-```bash
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173` in your browser.
-
-### Build
-
-```bash
+```sh
+npm test
 npm run build
-npm run preview
 ```
 
-## Usage
+The build creates a Worker at `dist/server/index.js`, embedding the browser assets and routing `/api/state` and `/api/audio`. Sites uses managed D1 `DB`, R2 `BUCKET` and authenticated owner identity. Preserve `.openai/hosting.json` when updating the existing site. Apply `server/schema.sql` when provisioning a fresh database.
 
-1. **Import ZIP:**
-   - Click the "Import" button in the Library
-   - Select a ZIP file from your Python importer output
-   - Choose a destination course (new or existing)
-   - Lessons are imported automatically
+`colorthief` is pinned in package.json; its browser bundle and licence are checked in for dependency-free browser execution.
 
-2. **Practice:**
-   - Select a course and lesson from the Library
-   - The player opens with the transcript displayed
-   - Use controls to play, pause, replay, and navigate phrases
-   - Use the speed control to slow down playback
+## Main files
 
-3. **Manage Content:**
-   - Search courses and lessons
-   - Track progress visually
-   - View lesson details in the sidebar
+- `src/app.mjs`: views, importing, lesson settings, queue and event handling.
+- `src/player.mjs`, `src/audio.mjs`: shared playback controller and native audio adapter.
+- `src/player-layout.mjs`, `src/mobile-player.css`: fixed mobile viewport, feedback and phrase fitting.
+- `src/transcript.mjs`: SRT, VTT, JSON and timestamped text parsing and segmentation.
+- `src/store.mjs`: IndexedDB cache and optimistic D1 snapshot synchronisation.
+- `src/ambient.mjs`: cached thumbnail palette extraction with fallback.
+- `server/`: authenticated persistence and private audio storage.
+- `tests/`: automated checks and browser QA fixtures.
 
-## Platform-Specific Features
+## Verification limits
 
-### Mobile
-- Full-screen player experience
-- Bottom-oriented controls for thumb-friendly interaction
-- Scrollable transcript with context
-- Collapsible sidebar
-- Swipe-friendly navigation
+39 automated tests and the Worker build pass. Real YouTube streaming stalled in the test browser and remains unverified end to end. Browser audio uploads and real-device Android behaviour still need verification. The IPA lexicon is a starter set. Persistence uses versioned per-owner snapshots, with explicit conflict resolution rather than field-level merging.
 
-### Desktop
-- Split-view with library on left, player on right
-- Sidebar with lesson details
-- Keyboard support for common actions
-
-## Data Persistence
-
-All data is stored locally in IndexedDB:
-- Courses and lesson metadata
-- Audio and image assets
-- Progress and completion status
-- Playback positions
-
-Data persists across browser restarts. For cross-device sync, export/import functionality can be added, or migration to ChatGPT Sites' D1 database can be implemented.
-
-## Known Limitations
-
-- Audio playback requires a supported browser
-- Very large ZIP files (>500MB) may require extended import time
-- Mobile browsers have restrictions on continuous background playback
-- Some browsers restrict autoplay of audio without user interaction
-
-## Future Enhancements
-
-- IPA pronunciation guidance
-- Speaker identification and filtering
-- Recording and playback comparison
-- Session history and statistics
-- Cross-device synchronization via D1 migration
-- PWA installation support
-- Keyboard shortcuts
-
-## Deployment to ChatGPT Sites
-
-This application is designed to migrate to ChatGPT Sites:
-
-1. Storage layer is abstracted and can be switched from IndexedDB to D1
-2. Static assets can be hosted on ChatGPT Sites
-3. Server-side functions can handle ZIP uploads and validation
-4. Authentication can be added via ChatGPT Sites' built-in auth
-
-See inline comments in `src/services/storage.ts` for D1 migration notes.
-
-## License
-
-Private application for personal use.
-
----
-
-**Built with React, TypeScript, and Tailwind CSS**
+This is a source export. Repository publication does not by itself redeploy the existing ChatGPT Site. No credentials, personal lessons, uploaded recordings or local caches are included.
