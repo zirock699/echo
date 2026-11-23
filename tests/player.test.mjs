@@ -13,7 +13,7 @@ async function fixture(t){
   const p={time:27,state:5,config,rate:1,cueVideoById(x){calls.push(['cue',x.videoId]);this.time=x.startSeconds;},seekTo(x){this.time=x;calls.push(['seek',x]);},playVideo(){this.state=1;config.events.onStateChange({data:1});calls.push('play');},pauseVideo(){this.state=2;config.events.onStateChange({data:2});calls.push('pause');},getCurrentTime(){return this.time;},getDuration(){return 80;},getAvailablePlaybackRates(){return [.5,1,1.5];},setPlaybackRate(x){this.rate=x;},getPlaybackRate(){return this.rate;},getPlayerState(){return this.state;},destroy(){calls.push('destroy');},getIframe(){return {setAttribute(){}};}};
   players.push(p);queueMicrotask(()=>config.events.onReady({target:p}));return p;
  }}};
- const e=new PlayerEngine();e.load(lesson(),{speed:1.5,leadIn:0});
+ const e=new PlayerEngine();e.load(lesson(),{mode:'manual',speed:1.5,leadIn:0});
  t.after(()=>e.destroy());return {e,calls,players};
 }
 test('initialisation supplies video ID, preserves position and speed, and deduplicates requests',async t=>{
@@ -45,6 +45,6 @@ test('speed preference survives asynchronous rate changes and cue resets',async 
 
 test('resume after transcript cue IDs change selects the cue at saved media position',async t=>{const {e}=await fixture(t);const l=lesson();l.progress={position:31.5,phraseId:'old-imported-id',coverage:[]};e.load(l,{leadIn:0});assert.equal(e.current().id,'b');await e.initialise();e.play();assert.equal(e.yt.time,31.5);});
 test('seeking into a gap targets the upcoming cue instead of retaining an unrelated old cue',async t=>{const {e}=await fixture(t);await e.initialise();e.seekRecording(30,false);assert.equal(e.current().id,'b');assert.equal(e.time,30);e.play();assert.equal(e.yt.time,30);});
-test('overlapping cues resolve to an earlier cue still active after a short overlap ends',async t=>{const {e}=await fixture(t);e.lesson.phrases=[{id:'long',start:0,end:10,text:'Long caption'},{id:'short',start:2,end:3,text:'Short overlap'}];assert.equal(e.resolvePhrase(4)?.id,'long');assert.equal(e.resolvePhrase(2.5)?.id,'short');});
+test('overlapping cues resolve to an earlier cue still active after a short overlap ends',async t=>{const {e}=await fixture(t);e.lesson.phrases=[{id:'long',start:0,end:10,text:'Long caption'},{id:'short',start:2,end:3,text:'Short overlap'}];assert.equal(e.resolvePhrase(4)?.id,'long');assert.equal(e.resolvePhrase(2.5)?.id,'long');});
 
 test('callbacks from a discarded YouTube player cannot mutate its replacement or finish a new phrase',async t=>{const {e,players}=await fixture(t);await e.initialise();const old=players[0];await e.retry();e.seekPhrase('b',false);const phrase=e.current().id,state=e.state;old.config.events.onStateChange({data:0});old.config.events.onError({data:100});old.config.events.onPlaybackRateChange({data:.5});assert.equal(e.current().id,phrase);assert.equal(e.state,state);assert.equal(e.error,'');assert.equal(e.speed,1.5);assert.equal(e.phraseDone,false);});

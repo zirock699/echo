@@ -122,6 +122,7 @@ export function speechText(text) {
 }
 export const TARGETS = {short:[2,4],balanced:[4,8],long:[8,15]};
 export function groupPhrases(segments, mode='balanced') {
+  if(mode==='original')return segments.map(s=>({...s,id:uid(),segmentIds:[s.id]}));
   const [min,max]=TARGETS[mode] || TARGETS.balanced;
   const source=segments.filter(s=>isSpeech(s.text) && speechText(s.text));
   const output=[];let group=[],groupEnd=0;

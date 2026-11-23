@@ -24,3 +24,7 @@ The user rejected the oversized, sparse player, bulky notices and poor option di
 ## Synchronisation implementation
 
 See [PLAYBACK_SYNC.md](PLAYBACK_SYNC.md) for the confirmed seek/clock/parser defects, source-offset rules, regression workflow and live YouTube verification limitation. These corrections preserve the practice decisions above and introduce no layout redesign.
+
+## First-application timing recovery, 23 November 2026
+
+The user explicitly requested recovery from the first application commit on main (`f69042d`). Normal playback therefore defaults to Continuous with exact source cues and zero lead-in. Manual/Automatic remain deliberate shadowing choices, with lead-in supported there. This overrides the later replacement's Manual/balanced defaults. Existing unedited generated cuts recover once with a backup and Undo; explicit transcript edits stay intact. See [PLAYBACK_SYNC.md](PLAYBACK_SYNC.md) for migration and verification details.

@@ -16,8 +16,8 @@ export const warmYouTube=()=>loadYouTubeAPI().catch(()=>null);
 export const usesUploadedAudio=lesson=>!!(lesson?.audio?.id&&lesson.audio.url==='/api/audio/'+lesson.audio.id&&/^[a-f0-9-]{36}$/.test(lesson.audio.id)&&lesson.mediaSource!=='youtube');
 export class PlayerEngine {
  constructor(){
-   this.wantsPlayback=false;this.phraseDone=false;this.mediaIdentity='';this.generation=0;this.yt=null;this.ready=false;this.initialising=null;this.error='';this.lesson=null;this.phrase=null;this.mode='manual';this.loop=false;this.playing=false;this.state='idle';
-   this.speed=1;this.requestedSpeed=1;this.leadIn=.5;this.config={pauseType:'duration',fixedPause:4,multiplier:1.5};
+   this.wantsPlayback=false;this.phraseDone=false;this.mediaIdentity='';this.generation=0;this.yt=null;this.ready=false;this.initialising=null;this.error='';this.lesson=null;this.phrase=null;this.mode='continuous';this.loop=false;this.playing=false;this.state='idle';
+   this.speed=1;this.requestedSpeed=1;this.leadIn=0;this.config={pauseType:'duration',fixedPause:4,multiplier:1.5};
    this.selection='all';this.range=null;this.speakers=[];this.time=0;this.duration=0;this.timer=null;this.waitTimer=null;this.token=0;this.lastSample=null;
    this.onPractised=()=>{};this.activeSeconds=0;this.previewEnd=null;this.session=null;this.onChange=()=>{};this.onTick=()=>{};this.onError=()=>{};this.onSave=()=>{};this.lastSave=0;
  }
@@ -64,6 +64,7 @@ export class PlayerEngine {
  async createAudio(generation){
    const adapter=new AudioAdapter(this.lesson.audio,this.lesson.audioOffset||0,{
      onStateChange:e=>{if(generation===this.generation)this.handleYTState(e.data);},
+     onTimeUpdate:()=>{if(generation===this.generation)this.tick();},
      onPlaybackRateChange:e=>{if(generation===this.generation){this.speed=e.data;this.onChange();}},
      onAutoplayBlocked:()=>{if(generation===this.generation){this.playing=false;this.state='blocked';this.error='Press Play to enable audio playback.';this.onChange();}},
      onError:e=>{if(generation===this.generation){this.playing=false;this.state='error';this.error=e.message;this.onChange();}}
@@ -106,8 +107,8 @@ export class PlayerEngine {
    this.selection='all';this.range=null;this.speakers=[];this.loop=false;
    const saved=lesson.phrases.find(p=>p.id===lesson.progress?.phraseId);
    this.time=lesson.progress?.position || saved?.start || lesson.phrases[0]?.start || 0;
-   this.phrase=saved&&this.time>=saved.start-this.leadIn&&this.time<=saved.end+.05?saved:this.phraseAtOrNext(this.time);
-   this.phraseDone=!!this.phrase&&this.time>=this.phrase.end-.1;this.duration=lesson.duration||0;
+   this.phrase=this.mode==='continuous'?(this.resolvePhrase(this.time)||saved||lesson.phrases[0]):(saved&&this.time>=saved.start-this.leadIn&&this.time<=saved.end+.05?saved:this.phraseAtOrNext(this.time));
+   this.phraseDone=this.mode!=='continuous'&&!!this.phrase&&this.time>=this.phrase.end-.1;this.duration=lesson.duration||0;
    this.playing=false;this.state=this.ready?'ready':'loading';
    if(this.ready&&this.yt){ if(changed)this.yt.cueVideoById({videoId:lesson.videoId,startSeconds:this.time});else this.yt.seekTo(this.time,true);this.applySpeed(); }
    this.onChange();
@@ -124,20 +125,17 @@ export class PlayerEngine {
  setLoop(enabled){this.loop=!!enabled;this.cancel();this.onChange();}
  seekPhrase(id,continuePlayback=this.playing){
    if(!this.lesson)return;const p=this.lesson.phrases.find(p=>p.id===id);if(!p)return;
-   this.cancel();this.wantsPlayback=!!continuePlayback;this.phraseDone=false;this.phrase=p;this.time=Math.max(0,p.start-this.leadIn);
+   this.cancel();this.wantsPlayback=!!continuePlayback;this.phraseDone=false;this.phrase=p;this.time=Math.max(0,p.start-(this.mode==='continuous'?0:this.leadIn));
    if(this.yt){this.yt.seekTo(this.time,true);if(continuePlayback)this.yt.playVideo();else this.yt.pauseVideo();}
    this.playing=!!continuePlayback;this.state=continuePlayback?'playing':'paused';this.onChange();this.onTick();this.onSave();
  }
  seekRecording(time,continuePlayback=this.playing){
    if(!this.lesson)return;this.cancel();this.time=Math.max(0,Math.min(time,this.duration||Number.MAX_SAFE_INTEGER));
-   this.phrase=this.phraseAtOrNext(this.time);
+   this.phrase=this.mode==='continuous'?(this.resolvePhrase(this.time)||this.phrase||this.lesson.phrases[0]):this.phraseAtOrNext(this.time);
    if(this.yt){this.yt.seekTo(this.time,true);if(continuePlayback)this.yt.playVideo();else this.yt.pauseVideo();}
    this.playing=!!continuePlayback;this.state=continuePlayback?'playing':'paused';this.onChange();this.onTick();this.onSave();
  }
- resolvePhrase(t){if(!this.lesson)return null;const p=this.lesson.phrases;let l=0,r=p.length-1,closest=null;
-   while(l<=r){const m=(l+r)>>1;if(p[m].start<=t){closest=p[m];l=m+1;}else r=m-1;}
-   for(let i=r;i>=0;i--)if(t<=p[i].end+.15)return p[i];return null;
- }
+ resolvePhrase(t){return this.lesson?.phrases.find(p=>p.start<=t&&t<p.end)||null;}
  phraseAtOrNext(time){return this.resolvePhrase(time)||this.lesson?.phrases.find(p=>p.start>=time)||this.lesson?.phrases.at(-1)||null;}
  play(){
    if(!this.lesson||!this.ready||!this.yt)return;
@@ -184,7 +182,7 @@ export class PlayerEngine {
      if(this.previewEnd!==null){const match=this.phraseAtOrNext(cur);if(match&&match.id!==this.phrase?.id){this.phrase=match;this.onChange();}if(this.playing&&cur>=this.previewEnd-.05){this.cancel();this.yt.pauseVideo();this.playing=false;this.state='paused';this.onChange();}this.onTick();return;}
      if(this.mode==='continuous'){
        const match=this.resolvePhrase(cur);if(match&&match.id!==this.phrase?.id){this.phrase=match;this.onChange();}
-     }else if(this.playing&&this.phrase&&cur>=this.phrase.end-.045){this.boundary();return;}
+     }else if(this.playing&&this.phrase&&cur>=this.phrase.end){this.boundary();return;}
      if(this.playing&&Date.now()-this.lastSave>5000){this.lastSave=Date.now();this.onSave();}
      this.onTick();
    }catch{}

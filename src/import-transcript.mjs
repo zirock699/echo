@@ -1,7 +1,7 @@
 import {parseTranscript,validateSegments,groupPhrases,uid} from './transcript.mjs';
 export function decodeCaption(bytes){if(bytes[0]===255&&bytes[1]===254)return new TextDecoder('utf-16le').decode(bytes);if(bytes[0]===254&&bytes[1]===255)return new TextDecoder('utf-16be').decode(bytes);return new TextDecoder().decode(bytes);}
 /** Preserve source verbatim; malformed cues do not invalidate usable neighbours. */
-export function parseImportedTranscript(source,filename='transcript.srt',grouping='balanced'){
+export function parseImportedTranscript(source,filename='transcript.srt',grouping='original'){
  const format=/^\s*\uFEFF?WEBVTT/.test(source)?'transcript.vtt':filename;
  try{const parsed=parseTranscript(source,format),checked=validateSegments(parsed.segments),notes=[...(parsed.problems||[]),...checked.errors,...checked.warnings];const segments=checked.segments;return {segments,phrases:grouping==='original'?segments.map(s=>({...s,id:uid()})):groupPhrases(segments,grouping),grouping,notes,status:segments.length?'ready':'invalid'};}catch(e){return {segments:[],phrases:[],notes:[e.message],status:'invalid'};}
 }

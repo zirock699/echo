@@ -9,6 +9,7 @@ export class AudioAdapter {
    on('error',()=>{const message='This audio could not be loaded. Check the file format or try uploading it again.';events.onError?.({message});reject(Error(message));});
   });
   on('playing',()=>emit(1));on('waiting',()=>emit(3));on('pause',()=>emit(2));on('ended',()=>emit(0));
+  on('timeupdate',()=>events.onTimeUpdate?.());on('seeked',()=>events.onTimeUpdate?.());
   on('ratechange',()=>events.onPlaybackRateChange?.({data:this.audio.playbackRate}));
   this.audio.preload='auto';this.audio.src=file.url;this.audio.load();
  }

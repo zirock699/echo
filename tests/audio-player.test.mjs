@@ -10,7 +10,7 @@ test('uploaded audio drives Play, Replay and Next through the same phrase contro
  globalThis.document={querySelector:()=>({replaceChildren(){},append(){}}),createElement:()=>({})};
  const id='00000000-0000-4000-8000-000000000001';
  const lesson={id:'native',videoId:'iG9CE55wbtY',audio:{id,url:'/api/audio/'+id},mediaSource:'audio',phrases:[{id:'a',start:.1,end:1.2,text:'First phrase.'},{id:'b',start:2,end:3.2,text:'Second phrase.'}],progress:{position:.1,phraseId:'a',coverage:[]},statuses:{}};
- const p=new PlayerEngine();t.after(()=>p.destroy());p.load(lesson,{leadIn:0,speed:1});await p.initialise();
+ const p=new PlayerEngine();t.after(()=>p.destroy());p.load(lesson,{mode:'manual',leadIn:0,speed:1});await p.initialise();
  assert.equal(p.ready,true);assert.equal(transportState(p).label,'Play');p.play();assert.equal(transportState(p).label,'Pause');
  p.yt.audio.currentTime=1.21;p.tick();assert.equal(p.playing,false);assert.equal(transportState(p).label,'Replay');
  const marks=[];p.onPractised=id=>marks.push(id);p.next();assert.deepEqual(marks,['a']);assert.equal(p.phrase.id,'b');assert.equal(p.playing,true);assert.equal(p.yt.audio.currentTime,2);

@@ -6,7 +6,7 @@ import {parseTranscript,validateSegments,groupPhrases,activeWordIndices} from '.
 function fixture(t,prefs={}){
  t.mock.timers.enable({apis:['setTimeout','setInterval','Date'],now:10000});
  const lesson={id:'sync',videoId:'iG9CE55wbtY',phrases:[{id:'a',start:0,end:1,text:'First phrase.'},{id:'b',start:1,end:2,text:'Second phrase.'},{id:'c',start:4,end:6,text:'Third phrase.'}],statuses:{},progress:{position:0,phraseId:'a',coverage:[]}};
- const p=new PlayerEngine();p.load(lesson,{leadIn:0,...prefs});
+ const p=new PlayerEngine();p.load(lesson,{mode:'manual',leadIn:0,...prefs});
  const media={time:0,state:2,pending:null,deferred:false,seekTo(time){if(this.deferred)this.pending=time;else this.time=time;},playVideo(){this.state=1;p.handleYTState(1);},pauseVideo(){this.state=2;p.handleYTState(2);},getCurrentTime(){return this.time;},getDuration(){return 20;},getPlayerState(){return this.state;},destroy(){}};
  p.yt=media;p.ready=true;p.state='ready';p.duration=20;t.after(()=>p.destroy());return {p,media,lesson};
 }

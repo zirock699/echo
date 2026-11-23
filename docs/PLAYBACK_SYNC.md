@@ -1,39 +1,36 @@
-# Playback recovery — 23 November 2026
+# First-application playback recovery — 23 November 2026
 
-The playback controller has been recovered from commit `bfc7457`, the original source before ZIP courses, Mirror and the later timing patches. This supersedes the earlier seek-guard implementation documented here.
+## Correct baseline
 
-## Restored behaviour
+The user's original engine is **`f69042d`**, the first application commit on `main`. The preceding root commit `8b20d8a` contains only a README. The earlier `205bf45` recovery used the later replacement `bfc7457`; its original-engine claim was incorrect.
 
-- Manual mode owns the selected phrase and stops against its boundary. Delayed clock samples do not silently choose the next phrase.
-- Automatic mode stops the selected phrase, waits for its speaking pause, then advances.
-- Continuous mode follows media timestamps and retains gaps.
-- Seek/replay commands go directly to the source. The controller does not pause playback to wait for a guessed exact clock position. Approximate seek preroll can advance naturally.
-- The original 100ms sampling and phrase-boundary tolerance are restored. No wall-clock discontinuity detector, seek-settling thresholds or new seek-timeout state remain.
-- The primary Play/Pause/Replay control always uses PlayerEngine. Mirror uses its own playback only for explicit Record/comparison actions; the primary transport exits Mirror before resuming the original controller. Closing comparison never reroutes main Play to Mirror's audio element.
+In `f69042d`, `src/components/Player.tsx`, mounted by `src/App.tsx`, reads native `audio.currentTime` on `timeupdate`, finds the **first** original SRT cue satisfying `start <= time < end`, and updates the displayed cue. In overlaps the first matching cue wins; in gaps the previous displayed cue stays visible. It does not automatically pause at caption ends. Replay starts exactly at the cue start. The separate `src/services/audioSync.ts` is not the player mounted by App.
 
-## Small compatibility changes retained relative to the original
+## Restored contract
 
-Saved positions can select a matching phrase when imported/repaired cue IDs differ. Explicit recording-timeline seeks choose a matching or upcoming phrase in gaps. Timestamp lookup handles overlapping cues. These are deterministic timestamp lookups, not playback-state guesses. Retry/destruction invalidate callbacks from discarded players. Edit previews use their requested end rather than the ordinary phrase boundary. The audio adapter ignores intentionally interrupted play promises and stale playing events from paused audio.
+- Normal listening defaults to Continuous, zero lead-in and original transcript cues. It does not stop or replay when a caption ends. Source-clock matching uses the first application's exact interval rule, including overlaps and gaps.
+- Native `timeupdate` and `seeked` events update the controller. The existing 100ms sampling also supports the YouTube adapter. No synthetic wall clock or seek-blocking state machine is introduced.
+- Continuous replay/Next/phrase selection seek to the cue start, regardless of the separate shadowing lead-in preference.
+- Manual and Automatic remain explicit shadowing choices, with their existing lead-in, speaking pauses and marking rules. Their end guard no longer deliberately pauses 45ms before the phrase end. Polling/browser/media latency still bounds physical stopping accuracy.
+- Mirror remains separate: Record/comparison may use its own original-segment playback. Main Play/Pause/Replay always returns to PlayerEngine. No automatic playback of the user's attempt is added.
+- Startup/reload never autoplay. Audio offsets, YouTube source switching, progress, navigation, recording and editing remain supported. This ports the first player's timing contract to the current architecture; it does not replace the application with the old React UI or claim that the first application supported YouTube.
 
-Caption parsing improvements and verified word/text mapping remain. They do not infer new source timestamps. No CSS or library/navigation redesign is part of recovery.
+## Existing data and preferences
 
-## Imports and stored data
+`src/playback-recovery.mjs` runs once per eligible lesson. For unedited lessons it reparses a usable retained source transcript with its stored global offset, or uses validated stored segments when no source exists. It restores individual cue boundaries/text instead of retaining generated phrase cuts. Invalid source timestamps are not fabricated or silently replaced.
 
-New ZIP imports use the same balanced phrase grouper as the original manual import workflow, retaining raw caption cues and original SRT separately. Existing stored phrases, statuses, coverage and positions are not silently regrouped. The latest automatic generated-timing rewrite migration has been removed; already stored content is retained. Existing lessons can use the established Regroup preview/undo workflow when desired. Earlier recovery for genuinely empty imported transcripts remains, preserving position and audio.
+Changed lessons retain a `playbackRecoveryBackup` with the previous phrases, segments, statuses and progress, plus an ordinary Undo revision. Current media/assets, position, coverage, completion, collections and course references remain in place. Exact cue IDs are reused when possible; flags on an encompassing practised/difficult phrase transfer to its contained source cues. Old flags and the old position remain in the backup. Undo does not overwrite the current playback position. Deliberate edits/regrouping with existing revisions are left intact. Such lessons can explicitly use Regroup → Original transcript cues after reviewing the preview; Undo remains available.
 
-## Verification
+The one-time preference recovery stores the previous mode/lead-in/grouping under `previousPlaybackDefaults`, then restores Continuous/0/Original. Later explicit choices persist and are never reset by this migration again. Fresh libraries start with the correct defaults without generating a pending write or startup conflict. Legacy libraries loaded from cache/cloud retain their missing version marker until migration runs, so defaults merging cannot hide the recovery. Normal sync conflict rules remain in effect.
 
-`npm test` covers the original transport contract and the two side-by-side regressions from the review: delayed clock catch-up and a seek landing 200ms before its target. Tests that enforced the deliberately removed seek-blocking state machine were retired and replaced with recovery-contract tests; parser, storage, ZIP, permission, progress and original transport tests remain.
+New ZIP imports preserve SRT cues and source text. Manual import/regroup/settings expose Original transcript cues alongside the existing optional grouped lengths. The service worker cache version is updated and includes the recovery module.
 
-`npm run build` builds the Worker. No lint script is configured.
+## Verification and limits
 
-For browser integration on a disposable local server:
+`npm test` includes a direct comparison against the first application's cue-selection algorithm across cue ends, gaps, overlaps and backward/forward clock changes. It verifies no boundary pauses in normal listening, exact replay, explicit shadowing boundaries, recovery backups/status/progress, edit preservation, idempotence and cloud persistence. Existing playback, import, storage, recording and permission tests remain.
 
-```sh
-node scripts/dev.mjs --host 127.0.0.1 --port 4192
-python tests/browser_sync.py --url http://127.0.0.1:4192
-```
+`npm run build` builds the Worker. No lint command is configured.
 
-This uses FFmpeg/flite, Playwright and Chromium to generate a spoken MP3 and test application seeking, replay, lead-in, 0.5×/1×/2× playback, Manual/Automatic/Continuous modes, navigation/resume, refresh and real ZIP import with grouped phrases. The legacy 100ms poll is tested with up to 200ms stopping tolerance at 2× speed. Screenshots cover 320, 390, 820 and 1440px. Separate browser checks cover recording and returning from comparison to main-engine Play without concurrent audio, using a simulated microphone.
+`tests/browser_sync.py` runs real synthesized spoken MP3 and ZIP/SRT import regression checks on a disposable local server, including explicit Manual/Automatic/Continuous, speeds, lead-in, native-clock/text samples, navigation and reload. `tests/browser_original_playback.py` checks legacy grouped-data recovery, uninterrupted native playback over short cue ends, cue display/replay, persistence/backups, later Manual choice and responsive layouts. These tests replace only disposable localhost fixture libraries.
 
-Live YouTube remains unverified: the earlier browser probe could not reach its API (`ERR_TUNNEL_CONNECTION_FAILED`). API contract simulations and native MP3 playback are different evidence; no production deployment or physical-device streaming claim is made.
+Fresh screenshots are separate visual evidence; source tests are not visual checks. Live YouTube streaming and the user's affected personal lessons remain unverified without access to them. Simulated YouTube API tests and actual local MP3 playback are different evidence. Pushing this code is not production deployment.

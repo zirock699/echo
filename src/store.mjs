@@ -1,15 +1,17 @@
+import {restoreOriginalPlayback} from './playback-recovery.mjs';
 import {migrateLibrary} from './courses.mjs';
 import {uid} from './transcript.mjs';
-export function initialData(){return {schemaVersion:2,courses:[],categories:[],tags:[],lessons:[],collections:[],sessions:[],preferences:{theme:'dark',mode:'manual',speed:1,grouping:'balanced',leadIn:.5,pauseType:'duration',fixedPause:4,multiplier:1.5,showText:true,showIPA:false,wakeLock:false,reduceMotion:false,startupLesson:'recent'},lastLessonId:null};}
+export function initialData(){return {schemaVersion:2,courses:[],categories:[],tags:[],lessons:[],collections:[],sessions:[],preferences:{originalPlaybackVersion:1,theme:'dark',mode:'continuous',speed:1,grouping:'original',leadIn:0,pauseType:'duration',fixedPause:4,multiplier:1.5,showText:true,showIPA:false,wakeLock:false,reduceMotion:false,startupLesson:'recent'},lastLessonId:null};}
+const loadedData=raw=>raw?({...initialData(),...raw,preferences:{...initialData().preferences,...raw.preferences,originalPlaybackVersion:raw.preferences?.originalPlaybackVersion||0}}):initialData();
 const dbName='echo-studio-cache-v1';
 function openDB(){return new Promise((resolve,reject)=>{const req=indexedDB.open(dbName,1);req.onupgradeneeded=()=>{req.result.createObjectStore('kv');};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});}
 async function cacheGet(key){const db=await openDB();return new Promise((resolve,reject)=>{const tx=db.transaction('kv');const q=tx.objectStore('kv').get(key);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);tx.oncomplete=()=>db.close();});}
 async function cacheSet(key,value){const db=await openDB();return new Promise((resolve,reject)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(value,key);tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>reject(tx.error);});}
 export class Store {
  constructor(){this.data=initialData();this.revision=0;this.mode='checking';this.pending=false;this.seq=0;this.conflict=null;this.onChange=()=>{};this.timer=null;this.saving=false;this.retryDelay=2000;}
- migrate(){const missing=new Set(this.data.lessons.filter(l=>l.importedAt&&!l.phrases?.length&&l.source).map(l=>l.id));migrateLibrary(this.data);if(this.data.lessons.some(l=>missing.has(l.id)&&l.phrases?.length)){this.pending=true;this.seq++;clearTimeout(this.timer);this.timer=setTimeout(()=>this.flush(),0);}}
+ migrate(){const missing=new Set(this.data.lessons.filter(l=>l.importedAt&&!l.phrases?.length&&l.source).map(l=>l.id));migrateLibrary(this.data);const recovered=restoreOriginalPlayback(this.data);if(recovered||this.data.lessons.some(l=>missing.has(l.id)&&l.phrases?.length)){this.pending=true;this.seq++;clearTimeout(this.timer);this.timer=setTimeout(()=>this.flush(),0);}}
  async init(){
-   try{const saved=await cacheGet('state');if(saved?.data){this.data={...initialData(),...saved.data,preferences:{...initialData().preferences,...saved.data.preferences}};this.revision=saved.revision||0;this.pending=!!saved.pending;}}catch(e){console.warn('IndexedDB unavailable',e);this.mode='storage-error';}
+   try{const saved=await cacheGet('state');if(saved?.data){this.data=loadedData(saved.data);this.revision=saved.revision||0;this.pending=!!saved.pending;}}catch(e){console.warn('IndexedDB unavailable',e);this.mode='storage-error';}
    this.migrate();this.onChange();await this.connect();
  }
  async connect(){
@@ -18,7 +20,7 @@ export class Store {
      if(!res.ok) throw new Error(`API ${res.status}`);
      const response=await res.json();
      if(this.pending && response.revision!==this.revision) {this.conflict=response;this.mode='conflict';}
-     else if(!this.pending){this.data={...initialData(),...(response.data || initialData()),preferences:{...initialData().preferences,...response.data?.preferences}};this.revision=response.revision||0;this.mode='cloud';}
+     else if(!this.pending){this.data=loadedData(response.data);this.revision=response.revision||0;this.mode='cloud';}
      else {this.mode='cloud';this.flush();}
      this.migrate();await this.saveCache();this.onChange();
    }catch(e){if(this.mode!=='storage-error')this.mode='local';this.onChange();}
@@ -39,7 +41,7 @@ export class Store {
  async retry(){if(this.mode==='offline')this.mode='cloud';if(this.mode==='local')return this.connect();return this.flush();}
  resolveConflict(keepLocal){if(!this.conflict)return;
    if(keepLocal){this.revision=this.conflict.revision;this.mode='cloud';this.conflict=null;this.pending=true;this.flush();}
-   else {this.data={...initialData(),...this.conflict.data,preferences:{...initialData().preferences,...this.conflict.data?.preferences}};this.revision=this.conflict.revision;this.pending=false;this.mode='cloud';this.conflict=null;this.migrate();this.saveCache();this.onChange();}
+   else {this.data=loadedData(this.conflict.data);this.revision=this.conflict.revision;this.pending=false;this.mode='cloud';this.conflict=null;this.migrate();this.saveCache();this.onChange();}
  }
  export(){return JSON.stringify({app:'Echo Studio',version:1,exportedAt:new Date().toISOString(),data:this.data},null,2);}
  restore(raw){const v=JSON.parse(raw);if(v.app!=='Echo Studio'||!v.data||!Array.isArray(v.data.lessons)||!Array.isArray(v.data.collections)||!Array.isArray(v.data.sessions)||typeof v.data.preferences!=='object'||!v.data.preferences)throw Error('This is not a valid Echo Studio export.');if(v.data.lessons.length>3000||v.data.collections.length>1000||v.data.sessions.length>20000)throw Error('Backup exceeds supported limits.');this.mutate(d=>Object.assign(d,{...initialData(),...v.data}));}
