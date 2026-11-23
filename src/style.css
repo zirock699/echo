@@ -351,7 +351,7 @@ body.view-library .page { padding-top:12px; }
 .library-search input { min-height:44px; }
 .library-tabs { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; margin:8px 0 4px; padding:2px 0; }
 .library-tabs::-webkit-scrollbar { display:none; }
-.library-tabs button { min-height:44px; flex:none; padding:6px 12px; border:0; border-radius:0; background:transparent; color:var(--sub); font:inherit; font-size:13px; position:relative; isolation:isolate; white-space:nowrap; }
+.library-tabs button { min-height:44px; flex:none; padding:6px 10px; border:0; border-radius:0; background:transparent; color:var(--sub); font:inherit; font-size:13px; position:relative; isolation:isolate; white-space:nowrap; }
 .library-tabs button::before { content:""; position:absolute; inset:6px 0; border-radius:18px; background:var(--bg2); z-index:-1; }
 .library-tabs [aria-pressed=true] { color:var(--text); font-weight:600; }
 .library-tabs [aria-pressed=true]::before { background:var(--soft); box-shadow:inset 0 0 0 1px var(--line); }
@@ -595,3 +595,10 @@ body.view-settings .tip { font-size:12px; background:none; border:0; padding:0 4
  .collection-intro { display:none; }
  .collections-screen .screen-appbar { margin-bottom:8px; }
 }
+
+.course-resume { min-height:44px; padding:8px 14px; font-size:13px; }
+.compact-video-slot { position:relative; width:40px; height:40px; }
+@media(max-width:760px) { .compact-video-slot { width:40px; height:40px; } }
+
+.bulk-bar button { border:0; border-radius:8px; background:transparent; color:var(--sub); min-height:44px; font:inherit; font-size:13px; }
+.bulk-bar .selection-apply { background:var(--soft); color:var(--text); padding:6px 12px; }

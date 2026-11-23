@@ -10,3 +10,5 @@ export function swipeDirection(start,end,width){
  if(Math.abs(dx)<64||Math.abs(dx)<Math.abs(dy)*1.5)return null;
  return dx<0?'next':'previous';
 }
+/** Dismiss a mini player only for a deliberate horizontal swipe. */
+export function dismissCompactSwipe(start,end){if(!start||!end)return false;const dx=end.x-start.x,dy=end.y-start.y;return Math.abs(dx)>70&&Math.abs(dx)>Math.abs(dy)*1.8;}

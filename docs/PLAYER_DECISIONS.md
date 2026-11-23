@@ -35,6 +35,8 @@ Fix media-clock/seek alignment directly. Do not reset an existing playback mode,
 
 ## Mobile annotation changes, 23 November 2026
 
-Remove the player logo, phrase position badge and idle Echo Mirror line. Compare moves beside the settings gear. Keep the queue, IPA, phrase status actions, recording and practice modes accessible. Audio and YouTube mini players share a compact artwork strip with Close and horizontal swipe dismissal, which pause without deleting saved progress. YouTube pauses on navigation away from the full player; its mini Play reopens the visible 200 × 200 video. This supersedes the previous always-visible floating video card.
+Remove the player logo, phrase position badge and idle Echo Mirror line. Compare and Queue move beside the clock below the phrase; only the gear remains at the top right. Keep the queue, IPA, phrase status actions, recording and practice modes accessible. Audio and YouTube mini players share a compact artwork strip with Close and horizontal swipe dismissal, which pause without deleting saved progress. YouTube continues playing when minimised, using a small live viewport in the compact bar. This supersedes the previous always-visible floating video card.
 
 The later annotations remove the permanent timeline from the player footer. Seeking remains available in Options. Short layouts prioritise readable text and compact transport, with source artwork in the background and the YouTube viewport visually integrated into its layout slot.
+
+Latest correction: the course toolbar has one management menu, alongside Continue, Filter and Layout. Player top-right contains only the gear; clock, Queue, Compare and desktop fullscreen form a quiet tool row above transport. YouTube remains playing when minimised. The compact live viewport is an explicit user-requested exception to the earlier 200 × 200-only rule; full-player sizing and synchronisation remain intact. Close still pauses and dismisses either source.

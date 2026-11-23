@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {dismissCompactSwipe} from '../src/practice.mjs';
+test('mini player accepts horizontal dismissal in either direction, without stealing vertical scrolling',()=>{assert.equal(dismissCompactSwipe({x:150,y:100},{x:50,y:110}),true);assert.equal(dismissCompactSwipe({x:50,y:100},{x:150,y:110}),true);assert.equal(dismissCompactSwipe({x:50,y:100},{x:55,y:250}),false);assert.equal(dismissCompactSwipe({x:50,y:100},{x:100,y:110}),false);assert.equal(dismissCompactSwipe(null,{x:100,y:100}),false);});

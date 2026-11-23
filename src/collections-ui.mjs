@@ -8,7 +8,7 @@ export class CollectionsUI {
  constructor(store,render,open){Object.assign(this,{store,render,open,id:null,query:'',lessonQuery:'',page:1,lessonPage:1,dialog:'',draft:{},selected:new Set(),pickerQuery:'',pickerPage:1,editing:false});}
  get collection(){return this.store.data.collections.find(c=>c.id===this.id);}
  members(c=this.collection){const index=new Map(this.store.data.lessons.map(l=>[l.id,l]));return [...new Set(c?.lessonIds||[])].map(id=>index.get(id)).filter(Boolean);}
- art(lesson){const url=lesson?.thumbnail?.url||lesson?.frame?.url;return `<span class="library-art">${url?`<img src="${esc(url)}" alt="" loading="lazy">`:'<span aria-hidden="true">♫</span>'}</span>`;}
+ art(lesson){const url=lesson?.thumbnail?.url||lesson?.frame?.url||(lesson?.videoId?`https://i.ytimg.com/vi/${encodeURIComponent(lesson.videoId)}/mqdefault.jpg`:null);return `<span class="library-art">${url?`<img src="${esc(url)}" alt="" loading="lazy">`:'<span aria-hidden="true">♫</span>'}</span>`;}
  pager(page,action){return page.pages>1?`<nav class="library-pagination" aria-label="Collection pages"><button data-cx="${action}" data-page="${page.page-1}" ${page.page===1?'disabled':''}>Previous</button><span>${page.page} / ${page.pages}</span><button data-cx="${action}" data-page="${page.page+1}" ${page.page===page.pages?'disabled':''}>Next</button></nav>`:'';}
  view(){const c=this.collection;if(this.id&&!c)this.id=null;
   if(!c){const items=this.store.data.collections.filter(c=>c.name.toLowerCase().includes(this.query.toLowerCase())).sort((a,b)=>(b.updatedAt||b.createdAt)-(a.updatedAt||a.createdAt));const page=pageItems(items,this.page);this.page=page.page;
