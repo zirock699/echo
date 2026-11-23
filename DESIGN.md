@@ -127,7 +127,7 @@ At tablet sizes, adjust content width and density while preserving reachable con
 
 ## Home and lesson library
 
-Lead with “Your studio” and Add lesson. Preserve search, continue practising/resume, recently added lessons, favourites, collections and all lessons. Cards show thumbnail, title, known speaker, duration or phrase count, practice progress, favourite state and management access. Long titles may truncate on cards with the full title available accessibly; the player phrase may not.
+Use a single compact Home app bar with Search and Settings. Keep Add available through bottom navigation, the desktop sidebar and the empty-state action. Preserve continue practising/resume, recently added lessons, favourites, collections and all lessons. Cards show thumbnail, title, known speaker, duration or phrase count, practice progress, favourite state and management access. Long titles may truncate on cards with the full title available accessibly; the player phrase may not.
 
 Give the last lesson a direct Resume action on the landing screen and in its library entry, restoring the saved position without an intervening details screen. Preparing it on startup must still avoid autoplay. Prioritise resume over administrative actions. Use strong thumbnails and plainly labelled practice progress; separate listened position from the percentage explicitly marked Practised. Keep favourite and management access secondary rather than giving every lesson multiple equally prominent buttons. Allow titles enough room to be recognised, preferably two lines in mobile rows.
 
@@ -191,4 +191,12 @@ For UI changes, use Playwright on the actual local app (`node scripts/dev.mjs`),
 
 ## Compact library navigation
 
-Library uses a single compact app bar: title, Search icon and an overflow menu. Keep search input hidden until requested; Cancel clears and closes search. Mobile bottom navigation provides Home, Library, Add, Collections and Search. Settings remains available through Home’s gear and Library options; desktop retains its sidebar. Search from bottom navigation spans the library rather than the currently open course. Preserve compact content tabs and the existing paginated results below the app bar.
+Library uses a single compact app bar: title, Search icon and an overflow menu. Keep search input hidden until requested; Cancel clears and closes search. Mobile bottom navigation provides Home, Library, Add, Collections and Search. Settings remains available through Home’s gear and Library options; desktop retains its sidebar. Search from bottom navigation spans the library rather than the currently open course. Use horizontally scrollable content chips for All, Courses, Lessons and Unassigned. The next row provides native sort and category dropdowns, an accessible filter icon and a single icon that switches list/grid presentation. Selection starts through Library options or long-press and offers a visible Cancel action. Keep result counts and 24-item pagination; switching sort/category/layout preserves the remaining filters.
+
+## Home discovery shelves
+
+The latest YouTube Music references guide browsing interactions: compact content chips, a sort dropdown and view toggle in Library; artwork-led horizontal shelves with a see-all arrow on Home. Preserve Echo’s existing neutral palette, typography and product vocabulary. Do not copy music-specific labels, oversized headings or decorative branding.
+
+Home leads with a compact resume row. Below it, show shelves for courses, recently added lessons, favourites, populated user categories and collections when available. Each shelf previews at most eight items; its labelled arrow opens the exact full destination, with Library results still paginated. Horizontal tracks support touch scrolling, keyboard arrows/Home/End and visible focus. Keep titles to two lines, subordinate creator/lesson counts and understated progress; management remains secondary. Preserve horizontal positions through ordinary rerenders. Do not change playback state when browsing.
+
+The default Home shows at most four populated category shelves. All managed categories remain available in the horizontal category picker; selecting one shows its own preview and full Library destination. Empty categories offer clear guidance. Manage categories reuses the existing category/tag editor; no categories or lesson content are fabricated. The compact Home composition and neutral palette apply on desktop as well as mobile.

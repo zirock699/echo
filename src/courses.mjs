@@ -14,3 +14,5 @@ export function queryLibrary(data,{query='',filter='all',category='',tag='',cour
 }
 
 export function pageItems(items,page=1,size=24){const pages=Math.max(1,Math.ceil(items.length/size)),current=Math.max(1,Math.min(pages,Number(page)||1));return {items:items.slice((current-1)*size,current*size),page:current,pages,total:items.length};}
+
+export function categoryValues(data){return [...new Set([...(data.categories||[]),...(data.courses||[]).map(c=>c.category),...(data.lessons||[]).map(l=>l.category)].filter(Boolean))].sort((a,b)=>a.localeCompare(b));}
