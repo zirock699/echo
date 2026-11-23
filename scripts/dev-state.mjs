@@ -1,7 +1,7 @@
 // Preview-only backing stores. Production uses Sites-managed D1 and R2 bindings.
 export class DevDB {
  constructor(){this.rows=new Map();}
- prepare(sql){const rows=this.rows;return {bind(...a){return {async first(){return rows.get(a[0])||null;},async run(){if(sql.startsWith('INSERT')){if(rows.has(a[0]))return {meta:{changes:0}};rows.set(a[0],{revision:1,data:a[1]});return {meta:{changes:1}};}if(sql.startsWith('UPDATE')){const old=rows.get(a[2]);if(!old||old.revision!==a[3])return {meta:{changes:0}};rows.set(a[2],{revision:old.revision+1,data:a[0]});return {meta:{changes:1}};}return {meta:{changes:0}};}};}};}
+ prepare(sql){const rows=this.rows;return {bind(...a){return {async first(){return rows.get(a[0])||null;},async run(){if(sql.startsWith('INSERT')){if(rows.has(a[0]))return {meta:{changes:0}};rows.set(a[0],{revision:1,data:a[1],payload:a[2]});return {meta:{changes:1}};}if(sql.startsWith('UPDATE')){const old=rows.get(a[3]);if(!old||old.revision!==a[4])return {meta:{changes:0}};rows.set(a[3],{revision:old.revision+1,data:a[0],payload:a[1]});return {meta:{changes:1}};}return {meta:{changes:0}};}};}};}
 }
 export class DevBucket {
  constructor(){this.files=new Map();}

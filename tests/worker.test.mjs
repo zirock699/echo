@@ -4,8 +4,8 @@ class FakeD1{
  constructor(){this.map=new Map();}
  prepare(query){const db=this;return {bind(...args){return {
  async first(){const row=db.map.get(args[0]);return row?{...row}:null;},
- async run(){if(query.startsWith('INSERT')){if(db.map.has(args[0]))return {meta:{changes:0}};db.map.set(args[0],{revision:1,data:args[1]});return {meta:{changes:1}};}
- if(query.startsWith('UPDATE')){const row=db.map.get(args[2]);if(!row||row.revision!==args[3])return {meta:{changes:0}};db.map.set(args[2],{revision:row.revision+1,data:args[0]});return {meta:{changes:1}};}
+ async run(){if(query.startsWith('INSERT')){if(db.map.has(args[0]))return {meta:{changes:0}};db.map.set(args[0],{revision:1,data:args[1],payload:args[2]});return {meta:{changes:1}};}
+ if(query.startsWith('UPDATE')){const row=db.map.get(args[3]);if(!row||row.revision!==args[4])return {meta:{changes:0}};db.map.set(args[3],{revision:row.revision+1,data:args[0],payload:args[1]});return {meta:{changes:1}};}
  return {meta:{changes:0}};}
  };}};}
 }

@@ -19,16 +19,36 @@ const clean = s => String(s ?? '').replace(/<[^>]*>/g, '').replace(/&amp;/g, '&'
 export function parseSRT(text) {
   const body=String(text).replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n').trim(),lines=body.split('\n').map(x=>x.trim());
   const rows=lines.flatMap((line,index)=>line.includes('-->')?[index]:[]),segments=[],problems=[];
-  for(const block of body.split(/\n\s*\n/))if(!block.includes('-->')&&/[a-z]/i.test(block))problems.push('A caption block has no timestamp.');
+  if((!rows.length&&/[a-z]/i.test(body))||(rows.length&&/[a-z]/i.test(lines.slice(0,Math.max(0,rows[0]-1)).join(' '))))problems.push('A caption block has no timestamp.');
   for(const [index,row] of rows.entries()){
     const next=rows[index+1]??lines.length;
-    let content=lines.slice(row+1,next);const blank=content.indexOf('');if(blank>=0)content=content.slice(0,blank);
-    // A numbered cue may follow immediately, without a blank separator.
-    if(blank<0&&next<lines.length&&content.length>1&&/^\d+$/.test(lines[row-1]||'')&&/^\d+$/.test(content.at(-1)))content.pop();
+    let content=lines.slice(row+1,next);
+    while(content.at(-1)==='')content.pop();
+    // A cue identifier belongs to the following timestamp, not the spoken text.
+    if(next<lines.length&&content.length>1&&(content.at(-2)===''||/^\d+$/.test(content.at(-1))&&/^\d+$/.test(lines[row-1]||'')))content.pop();
+    content=content.filter(Boolean);
     const [from,to]=lines[row].split(/\s*-->\s*/);
-    segments.push({id:uid(),start:parseTime(from),end:parseTime(to?.split(/\s/)[0]),text:clean(content.join(' '))});
+    segments.push({id:uid(),start:parseTime(from),end:parseTime(to?.split(/\s/)[0]),text:clean(content.join(' ')),captionLines:content.map(clean).filter(Boolean)});
   }
   return {segments,problems};
+}
+/** YouTube roll-up captions repeat display context in short transition cues. */
+export function normalizeRollingCaptions(segments){
+  const lines=s=>s.captionLines||[s.text];
+  const transitions=segments.filter((s,i)=>i>0&&s.end>s.start&&s.end-s.start<=.04&&Math.abs(s.start-segments[i-1].end)<.06&&lines(s).length===1&&s.text===lines(segments[i-1]).at(-1)).length;
+  if(transitions<2)return {segments,rollingCaptions:false};
+  const output=[];let previous=[];
+  for(const s of segments){
+    const display=lines(s);let overlap=0;
+    if(output.length&&Math.abs(s.start-output.at(-1).end)<.06&&(display.length>1||s.end-s.start<=.04)){
+      for(let n=1;n<=Math.min(previous.length,display.length);n++)if(previous.slice(-n).every((line,i)=>line===display[i]))overlap=n;
+    }
+    const spoken=display.slice(overlap);
+    if(!spoken.length&&output.length)output.at(-1).end=Math.max(output.at(-1).end,s.end);
+    else if(spoken.length)output.push({...s,text:spoken.join(' '),captionLines:spoken});
+    previous=display;
+  }
+  return {segments:output,rollingCaptions:true,rawSegments:segments,warnings:['Rolling caption display updates were combined; repeated on-screen context was removed. Source timestamps were retained.']};
 }
 export function parseVTT(text) {
   let body = String(text).replace(/^\uFEFF/, '').replace(/\r/g, '').trim();
@@ -80,9 +100,9 @@ export function parseTranscript(text, filename='') {
   if (hint.endsWith('.json') || /^[\[{]/.test(body) && !body.startsWith('[Music]')) {
     try { return {...parseJSON(body),format:'JSON'}; } catch(e) { if (hint.endsWith('.json')) throw e; }
   }
-  if (hint.endsWith('.vtt') || body.startsWith('WEBVTT')) return {...parseVTT(body),format:'WebVTT'};
+  if (hint.endsWith('.vtt') || body.startsWith('WEBVTT')) {const parsed=parseVTT(body);return {...parsed,...normalizeRollingCaptions(parsed.segments),format:'WebVTT'};}
   if (!body.includes('-->') && /^(?:\[)?(?:\d+:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?\]?(?:\s|$)/m.test(body)) return {...parseTimestampedText(body),format:'Timestamped text'};
-  return {...parseSRT(body),format:'SRT'};
+  const parsed=parseSRT(body);return {...parsed,...normalizeRollingCaptions(parsed.segments),format:'SRT'};
 }
 export function validateSegments(segments, duration=null, offset=0) {
   const errors=[],warnings=[], valid=[];
