@@ -130,7 +130,7 @@ body.view-player.light .word.current-word { color:white; }
  body.view-player .queue-panel { width:310px; right:12px; }
  .lesson-meta .phrase-flags { display:none; }
 }
-@media(max-width:760px) {
+@media(max-width:760px), (max-width:1024px) and (max-height:520px) and (pointer:coarse) {
  .player-page { padding-bottom:0; }
  .player-top { min-height:66px; border:0; background:none; padding:12px 18px 4px; gap:10px; display:grid; grid-template-columns:42px 1fr 42px; }
  .player-brand { justify-content:center; font-size:23px; gap:9px; }

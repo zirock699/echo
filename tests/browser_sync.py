@@ -64,9 +64,9 @@ with tempfile.TemporaryDirectory(prefix='echo-sync-') as directory:
    expected=next((cue for cue in phrases if cue['start']+.12<sample['time']<cue['end']-.12),None)
    if expected:assert sample['id']==expected['id'],sample;verified+=1
   assert verified>30,verified
-  page.locator('#mirror-main-play').click();seek(phrases[2]['start']+.25);phrase(2);position=current();page.get_by_role('button',name='Back to library',exact=True).click();page.locator('.compact-expand').click();phrase(2);assert abs(current()-position)<.08
+  page.locator('#mirror-main-play').click();seek(phrases[2]['start']+.25);phrase(2);position=current();page.get_by_role('button',name='Back',exact=True).click();page.locator('.compact-expand').click();phrase(2);assert abs(current()-position)<.08
   # Persisted resume uses media position even if transcript IDs have changed.
-  page.wait_for_timeout(1300);page.reload(wait_until='networkidle');page.get_by_role('button',name='Resume lesson',exact=True).click();page.wait_for_function("!document.querySelector('#mirror-main-play').disabled");phrase(2);assert abs(current()-position)<.1
+  page.wait_for_timeout(1300);page.reload(wait_until='networkidle');page.wait_for_function("!document.querySelector('#mirror-main-play').disabled");phrase(2);assert abs(current()-position)<.1;assert page.evaluate(clock+'.paused')
   for width,height in [(320,568),(390,844),(820,1180),(1440,900)]:
    page.set_viewport_size({'width':width,'height':height});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth');page.screenshot(path=f'/tmp/echo-sync-player-{width}.png')
   assert not errors,errors
