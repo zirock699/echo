@@ -1,4 +1,4 @@
-# First-application playback recovery — 23 November 2026
+# Playback synchronisation repair, 23 November 2026
 
 ## Correct baseline
 
@@ -9,7 +9,7 @@ In `f69042d`, `src/components/Player.tsx`, mounted by `src/App.tsx`, reads nativ
 ## Restored contract
 
 - Normal listening defaults to Continuous, zero lead-in and original transcript cues. It does not stop or replay when a caption ends. Source-clock matching uses the first application's exact interval rule, including overlaps and gaps.
-- Native `timeupdate` and `seeked` events update the controller. The existing 100ms sampling also supports the YouTube adapter. No synthetic wall clock or seek-blocking state machine is introduced.
+- Native `timeupdate` and `seeked` events update the controller. The existing 100ms sampling also supports the YouTube adapter. Media time remains authoritative; asynchronous seeks retain their selected phrase until the source confirms the destination.
 - Continuous replay/Next/phrase selection seek to the cue start, regardless of the separate shadowing lead-in preference.
 - Manual and Automatic remain explicit shadowing choices, with their existing lead-in, speaking pauses and marking rules. Their end guard no longer deliberately pauses 45ms before the phrase end. Polling/browser/media latency still bounds physical stopping accuracy.
 - Mirror remains separate: Record/comparison may use its own original-segment playback. Main Play/Pause/Replay always returns to PlayerEngine. No automatic playback of the user's attempt is added.
@@ -21,7 +21,7 @@ In `f69042d`, `src/components/Player.tsx`, mounted by `src/App.tsx`, reads nativ
 
 Changed lessons retain a `playbackRecoveryBackup` with the previous phrases, segments, statuses and progress, plus an ordinary Undo revision. Current media/assets, position, coverage, completion, collections and course references remain in place. Exact cue IDs are reused when possible; flags on an encompassing practised/difficult phrase transfer to its contained source cues. Old flags and the old position remain in the backup. Undo does not overwrite the current playback position. Deliberate edits/regrouping with existing revisions are left intact. Such lessons can explicitly use Regroup → Original transcript cues after reviewing the preview; Undo remains available.
 
-The one-time preference recovery stores the previous mode/lead-in/grouping under `previousPlaybackDefaults`, then restores Continuous/0/Original. Later explicit choices persist and are never reset by this migration again. Fresh libraries start with the correct defaults without generating a pending write or startup conflict. Legacy libraries loaded from cache/cloud retain their missing version marker until migration runs, so defaults merging cannot hide the recovery. Normal sync conflict rules remain in effect.
+Timing recovery now preserves the selected mode, lead-in and grouping preferences. It only records its version marker. Earlier deployments may already have saved `previousPlaybackDefaults`; those values are retained, but this repair does not guess whether the current preferences were subsequently chosen deliberately. Fresh libraries start with the correct defaults without generating a pending write or startup conflict. Legacy libraries loaded from cache/cloud retain their missing version marker until migration runs, so defaults merging cannot hide the recovery. Normal sync conflict rules remain in effect.
 
 New ZIP imports preserve SRT cues and source text. Manual import/regroup/settings expose Original transcript cues alongside the existing optional grouped lengths. The service worker cache version is updated and includes the recovery module.
 
@@ -34,3 +34,13 @@ New ZIP imports preserve SRT cues and source text. Manual import/regroup/setting
 `tests/browser_sync.py` runs real synthesized spoken MP3 and ZIP/SRT import regression checks on a disposable local server, including explicit Manual/Automatic/Continuous, speeds, lead-in, native-clock/text samples, navigation and reload. `tests/browser_original_playback.py` checks legacy grouped-data recovery, uninterrupted native playback over short cue ends, cue display/replay, persistence/backups, later Manual choice and responsive layouts. These tests replace only disposable localhost fixture libraries.
 
 Fresh screenshots are separate visual evidence; source tests are not visual checks. Live YouTube streaming and the user's affected personal lessons remain unverified without access to them. Simulated YouTube API tests and actual local MP3 playback are different evidence. Pushing this code is not production deployment.
+
+## Seek alignment repair
+
+The earlier recovery still accepted the previous media clock immediately after `seekTo`. A backward Replay could therefore hit the new phrase end before the seek arrived; Continuous Next could replace the requested text with the old cue. These failures are reproduced by `tests/seek-alignment.test.mjs`, independently of caption grouping.
+
+A pending seek now retains the requested position/text until the source clock reaches the destination and native seeking has finished. Decoder/keyframe preroll is allowed to run towards the target. Stale samples do not add coverage or complete the requested phrase; successive seeks replace prior intent. An eight-second failure pauses with retry guidance instead of trusting an unrelated clock. Pause remains effective during pending seeks. Native seek completion also reconciles externally scrubbed positions.
+
+Manual/Automatic resume before the first phrase now starts at that phrase's configured lead-in, rather than playing an unrelated introduction beneath its text. A pause in the last 100ms resumes the remaining speech. Source offset bounds are checked before playing a phrase; a trimmed recording cannot silently substitute the beginning/end of its audio. Sampling is 20ms, backed by native time events. This reduces foreground boundary latency but is not a sample-accurate or background-mobile playback guarantee.
+
+Verification for this repair: 134 Node tests pass, including twelve new seek-alignment regressions. The initial five new regressions failed before the repair. Browser checks used the actual app/PlayerEngine/AudioAdapter with a disposable in-memory library and generated spoken WAV, with fixture-only source URL mapping. Native audio decoding and media events were real. Dark-theme player layouts were inspected at 320 × 568, 390 × 844, 844 × 390 and 1440 × 900 without page overflow. At 320 × 568 and 390 × 844, Manual playback started at 3.000s for a cue at 3.000s, stopped near 4.904s for its 4.900s end, and selected the second phrase at 5.400s. At 2×, the first cue stopped near 4.937s. Backward queue selection/Replay, Next, Automatic progression and Continuous progression were exercised. These are fixture results, not verification of the user's production lesson files or live YouTube streaming. Production sign-in was blocked by automatic approval review; no production library data was changed during diagnosis.

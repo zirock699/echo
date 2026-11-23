@@ -8,7 +8,7 @@ Later requirements below override conflicting parts of the original specificatio
 - Mobile left swipe in the gap between text and controls behaves exactly like Next. Right swipe plays the previous phrase without marking. Do not apply gestures to text or the queue.
 - Loading and buffering use an indicator inside the main button. Other short playback feedback stays in a fixed metadata row. Detailed errors are available on demand.
 - Keep secondary options and full recording position in sheets. Queue is a desktop sidebar and mobile sheet. No unlimited-loop control.
-- Normal listening follows the first application (`f69042d`): Continuous playback, original source cues, zero lead-in, no automatic cut at cue ends. Manual/Automatic remain explicit shadowing modes. Unedited generated lessons recover once with backups; deliberate transcript edits are preserved.
+- Normal listening follows the first application (`f69042d`): Continuous playback, original source cues, zero lead-in, no automatic cut at cue ends. Manual/Automatic remain explicit shadowing modes. Unedited generated lessons recover once with backups; deliberate transcript edits and existing playback preferences are preserved. Synchronisation repairs must not force a different practice mode.
 - Preserve Manual, Automatic and Continuous modes, supported speeds, lead-in, speaking pauses, phrase editing, IPA corrections, filters, progress, collections and private audio uploads.
 - Prepare the last-used or selected lesson on startup without autoplay. YouTube controls actual buffering and quality; do not promise forced lowest quality or guaranteed preloading.
 - Adapt phrase typography to available space; keep a readable minimum and preserve unusually long or enlarged text within its own reading area.

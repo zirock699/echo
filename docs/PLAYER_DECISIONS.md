@@ -28,3 +28,7 @@ See [PLAYBACK_SYNC.md](PLAYBACK_SYNC.md) for the confirmed seek/clock/parser def
 ## First-application timing recovery, 23 November 2026
 
 The user explicitly requested recovery from the first application commit on main (`f69042d`). Normal playback therefore defaults to Continuous with exact source cues and zero lead-in. Manual/Automatic remain deliberate shadowing choices, with lead-in supported there. This overrides the later replacement's Manual/balanced defaults. Existing unedited generated cuts recover once with a backup and Undo; explicit transcript edits stay intact. See [PLAYBACK_SYNC.md](PLAYBACK_SYNC.md) for migration and verification details.
+
+## Synchronisation repairs preserve practice choices
+
+Fix media-clock/seek alignment directly. Do not reset an existing playback mode, lead-in or grouping preference as a synchronisation fix. Manual/Automatic resume must begin within the selected phrase or its configured lead-in; Repeat/Next must wait for the requested media clock before applying phrase-end logic. See `tests/seek-alignment.test.mjs`.

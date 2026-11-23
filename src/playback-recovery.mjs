@@ -5,8 +5,8 @@ export function restoreOriginalPlayback(data){
  let changed=false;
  const prefs=data.preferences;
  if(prefs&&prefs.originalPlaybackVersion!==1){
-  prefs.previousPlaybackDefaults={mode:prefs.mode,leadIn:prefs.leadIn,grouping:prefs.grouping};
-  Object.assign(prefs,{mode:'continuous',leadIn:0,grouping:'original',originalPlaybackVersion:1});changed=true;
+  // Timing recovery must not change the user's practice mode or lead-in.
+  prefs.originalPlaybackVersion=1;changed=true;
  }
  for(const lesson of data.lessons||[]){
   if(lesson.originalPlaybackVersion===1)continue;

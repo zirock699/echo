@@ -19,7 +19,7 @@ asset=json.load(urllib.request.urlopen(urllib.request.Request(base+'/api/audio',
 cues=[{'id':'one','start':0,'end':.65,'text':'A short original cue'},{'id':'two','start':.65,'end':1.5,'text':'The next original cue'},{'id':'three','start':2,'end':4,'text':'Another original cue'}]
 lesson={**source,'id':'first-engine','audio':asset,'source':'','segments':cues,'phrases':[{'id':'generated','start':0,'end':4,'text':'A short original cue The next original cue Another original cue'}],'grouping':'balanced','revisions':[],'statuses':{'generated':{'practised':True}},'progress':{'position':.2,'phraseId':'generated','coverage':[[0,.2]]}}
 for key in ['originalPlaybackVersion','playbackRecoveryBackup']:lesson.pop(key,None)
-data={'schemaVersion':2,'lessons':[lesson],'courses':[],'collections':[],'sessions':[],'preferences':{'theme':'dark','startupLesson':'none','mode':'manual','leadIn':.5,'grouping':'balanced'},'lastLessonId':lesson['id']}
+data={'schemaVersion':2,'lessons':[lesson],'courses':[],'collections':[],'sessions':[],'preferences':{'theme':'dark','startupLesson':'none','mode':'continuous','leadIn':0,'grouping':'original'},'lastLessonId':lesson['id']}
 api('/api/state','PUT',{'expectedRevision':api('/api/state')['revision'],'data':data})
 with sync_playwright() as p:
  b=p.chromium.launch(executable_path='/usr/bin/chromium',args=['--no-sandbox']);page=b.new_page(viewport={'width':320,'height':568},is_mobile=True,has_touch=True);errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
