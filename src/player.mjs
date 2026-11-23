@@ -96,7 +96,7 @@ export class PlayerEngine {
    if(this.failedSeek!==null&&s===YT_STATES.PLAYING){this.yt?.pauseVideo();return;}
    if(this.pendingSeek&&s===YT_STATES.PLAYING&&!this.wantsPlayback){this.yt?.pauseVideo();return;}
    if(this.pendingSeek&&s===YT_STATES.PAUSED&&this.wantsPlayback)return;
-   if(!this.pendingSeek&&s===YT_STATES.PLAYING&&this.previewEnd===null){const cur=this.yt?.getCurrentTime?.();if(Number.isFinite(cur)&&Math.abs(cur-this.time)>.1)this.reconcileClock(cur);}
+   if(!this.pendingSeek&&s===YT_STATES.PLAYING&&this.previewEnd===null){const cur=this.yt?.getCurrentTime?.();if(Number.isFinite(cur)&&Math.abs(cur-this.time)>.1&&(this.mode==='continuous'||!this.inPhraseContext(cur)))this.reconcileClock(cur);}
    if(s===YT_STATES.PLAYING){this.wantsPlayback=true;this.error='';this.state='playing';this.playing=true;this.lastSample=null;this.startSession();}
    else if(s===YT_STATES.BUFFERING){if(this.wantsPlayback)this.state='buffering';this.playing=false;this.lastSample=null;}
    else if(s===YT_STATES.PAUSED){if(this.state!=='speaking-pause'){this.state='paused';this.playing=false;}this.lastSample=null;}
@@ -132,6 +132,8 @@ export class PlayerEngine {
    this.yt?.seekTo(target,true);
    if(!this.yt?.isSeeking?.()&&Math.abs((this.yt?.getCurrentTime?.()??NaN)-target)<.005){this.pendingSeek=null;this.lastClock=target;}
  }
+ // A requested shadowing phrase remains selected while its lead-in plays.
+ inPhraseContext(cur){return !!this.phrase&&cur>=Math.max(0,this.phrase.start-this.leadIn)-.04&&cur<this.phrase.end;}
  reconcileClock(cur){
    if(!Number.isFinite(cur))return;
    const match=this.mode==='continuous'?this.resolvePhrase(cur):this.phraseAtOrNext(cur);
@@ -225,7 +227,7 @@ export class PlayerEngine {
      if(this.yt.getDuration){const dur=this.yt.getDuration();if(dur>0&&dur!==this.duration){this.duration=dur;if(!this.lesson.duration){this.lesson.duration=dur;this.onSave();}}}
      const jump=Number.isFinite(this.lastClock)&&Math.abs(cur-this.lastClock)>Math.max(.35,this.speed*.3);
      const external=this.yt?.isSeeking?.();if(external){this.lastSample=null;return;}
-     if(this.previewEnd===null&&this.mode!=='continuous'&&!this.playing&&!this.phraseDone&&cur!==this.lastClock){
+     if(this.previewEnd===null&&this.mode!=='continuous'&&!this.playing&&!this.phraseDone&&cur!==this.lastClock&&!this.inPhraseContext(cur)){
        const match=this.phraseAtOrNext(cur);if(match&&match.id!==this.phrase?.id){this.phrase=match;this.phraseDone=false;this.cancel();this.onChange();}
      }
      this.lastClock=cur;const prev=jump?null:this.lastSample;

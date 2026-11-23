@@ -45,3 +45,9 @@ test('recording seeks and edit previews explicitly request playback during async
 test('lead-in before a trimmed recording clamps the seek target, not the transcript timestamps',t=>{
  const {p,m}=fixture(t);m.getTimeBounds=()=>({start:3.8,end:12});p.leadIn=1;p.seekPhrase('b',true);assert.equal(m.pending,3.8);assert.equal(p.pendingSeek.target,3.8);assert.equal(p.current().start,4);m.time=3.8;p.tick();assert.equal(p.pendingSeek,null);assert.equal(p.current().id,'b');assert.equal(p.playing,true);
 });
+test('native playing callback retains the selected adjacent phrase during lead-in',t=>{
+ const {p,m}=fixture(t);p.lesson.phrases=[{id:'a',start:0,end:1.52,text:'First line'},{id:'b',start:1.52,end:3.32,text:'Second line'}];p.phrase=p.lesson.phrases[0];p.leadIn=.5;m.time=1.52;p.seekPhrase('b',false);m.time=1.02;p.tick();assert.equal(p.pendingSeek,null);m.time=1.15;m.state=1;p.handleYTState(1);assert.equal(p.current().id,'b');m.time=3.32;p.tick();assert.equal(p.phraseDone,true);assert.equal(p.current().id,'b');
+});
+test('paused lead-in clock drift cannot switch to the previous phrase',t=>{
+ const {p,m}=fixture(t);p.lesson.phrases=[{id:'a',start:0,end:1.52,text:'First line'},{id:'b',start:1.52,end:3.32,text:'Second line'}];p.leadIn=.5;p.seekPhrase('b',false);m.time=1.02;p.tick();m.time=1.04;p.tick();assert.equal(p.current().id,'b');
+});
