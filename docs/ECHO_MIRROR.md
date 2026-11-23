@@ -20,7 +20,7 @@ Mirror pauses the main player and uses the same lesson asset and phrase boundari
 
 Waveforms are decoded only when Compare opens. The current lesson's decoded original is cached. For mobile memory safety, original-waveform analysis is limited to audio up to 10 minutes and 50 MB encoded; longer files remain usable for listening, recording and comparison playback, with a waveform-unavailable explanation. Browser codec/decoder failures similarly preserve playback and recording. This limit concerns visualisation, not the lesson's supported playback duration.
 
-YouTube-only lessons do not expose their audio for analysis and retain their existing player. Upload an audio source to use Mirror. Microphone use needs a secure origin and browser support.
+YouTube-only lessons do not expose their audio for analysis and retain their existing player. Upload an audio source to use Mirror. Microphone use needs HTTPS (or localhost), MediaRecorder support and permission from both the browser and any embedding host. Record opens the real browser request, with a cancellable in-app explanation while it is pending. Denial, missing/busy devices, insecure origins and blocked iframe permissions have distinct recovery guidance; a denied permission must be changed in browser/site settings. If original playback is blocked after microphone access, Continue provides another user gesture without requesting the microphone again. Recording selects a supported WebM/Opus or MP4 format. Cancelling releases any granted stream, including permission grants that arrive after cancellation.
 
 ## Validation
 

@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {microphoneBlock,microphoneError,recordingOptions} from '../src/microphone.mjs';
+const supported={isSecureContext:true,navigator:{mediaDevices:{getUserMedia(){}}},MediaRecorder:class{}};
+test('insecure contexts and iframe permission policies have distinct actionable diagnostics',()=>{assert.equal(microphoneBlock({...supported,isSecureContext:false}).kind,'secure');assert.equal(microphoneBlock({...supported,document:{permissionsPolicy:{allowsFeature:()=>false}}}).kind,'policy');assert.equal(microphoneBlock(supported),null);});
+test('device errors are distinct from browser permission rejection',()=>{assert.match(microphoneError({name:'NotFoundError'}),/No microphone/);assert.match(microphoneError({name:'NotReadableError'}),/Close other apps/);assert.match(microphoneError({name:'NotAllowedError'}),/cannot reset/);});
+test('recording uses a browser-supported MIME type, including MP4 on Safari',()=>{assert.deepEqual(recordingOptions({isTypeSupported:t=>t==='audio/mp4'}),{mimeType:'audio/mp4'});assert.equal(recordingOptions({}),undefined);});

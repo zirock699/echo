@@ -188,3 +188,7 @@ The reference-led mobile lesson rows, larger effective touch targets, semantic g
 ## Verification standard
 
 For UI changes, use Playwright on the actual local app (`node scripts/dev.mjs`), mobile before desktop. Include 320 × 568, 390 × 844, tablet (e.g. 820 × 1180), desktop (e.g. 1440 × 900), short landscape and enlarged text where affected. Inspect fresh screenshots in both themes and relevant states. Test live interactions, not just element presence. Run `npm test` and `npm run build` when UI/playback code changes. Mock playback only with an explicit statement that real streaming remains unverified. This documentation-only change does not itself verify application accessibility or playback.
+
+## Compact library navigation
+
+Library uses a single compact app bar: title, Search icon and an overflow menu. Keep search input hidden until requested; Cancel clears and closes search. Mobile bottom navigation provides Home, Library, Add, Collections and Search. Settings remains available through Home’s gear and Library options; desktop retains its sidebar. Search from bottom navigation spans the library rather than the currently open course. Preserve compact content tabs and the existing paginated results below the app bar.

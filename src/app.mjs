@@ -11,7 +11,7 @@ import {playbackFeedback,fitTextSize} from './player-layout.mjs';
 const store=new Store(),player=new PlayerEngine();
 const ui={started:false,preparing:false,uploading:false,uploadError:'',queueWasPlaying:false,view:'home',search:'',libraryFilter:'all',sort:'recent',collectionId:null,modal:null,optionsTab:'playback',recordingOpen:false,queue:false,queueLimit:80,queueMenu:null,word:null,import:{url:'',title:'',speaker:'',text:'',fileName:'',offset:0,grouping:'balanced',preview:null,errors:[],warnings:[],format:''},pendingSummary:null,refocus:null};
 const root=document.querySelector('#app'),dock=document.querySelector('#youtube-dock'),toaster=document.querySelector('#toast');
-const libraryUI=new LibraryUI(store,()=>render(),id=>openLesson(id));libraryUI.bind(root);libraryUI.onLegacy=()=>action('youtube-add',{},{});libraryUI.onLibrary=()=>{ui.view='library';ui.collectionId=null;};libraryUI.onAssetsChanged=id=>{const l=store.data.lessons.find(l=>l.id===id);if(l)reloadSource(l);};
+const libraryUI=new LibraryUI(store,()=>render(),id=>openLesson(id));libraryUI.bind(root);libraryUI.onLegacy=()=>action('youtube-add',{},{});libraryUI.onLibrary=()=>{ui.view='library';ui.collectionId=null;};libraryUI.onSettings=()=>{ui.view='settings';render();};libraryUI.onAssetsChanged=id=>{const l=store.data.lessons.find(l=>l.id===id);if(l)reloadSource(l);};
 const recorder=new PracticeRecorder(()=>render());
 const mirror=new EchoMirror({notify:()=>render(),tick:()=>mirrorTick(),pause:()=>player.pause(),restore:time=>{if(current()?.id===mirror.lesson?.id)player.seekRecording(time,false);}});
 function ensureMirror(){mirror.enter(current(),player.current(),player.time,player.speed);}
@@ -27,7 +27,7 @@ function toast(message){toaster.textContent=message;toaster.classList.add('show'
 function applyTheme(){const v=pref().theme;const light=v==='light'||(v==='system'&&matchMedia('(prefers-color-scheme: light)').matches);document.body.classList.toggle('light',light);document.body.classList.toggle('dark',!light);}
 function syncHTML(){const modes={cloud:['Synced',false],local:['Device only',true],offline:['Pending sync',true],checking:['Connecting',true],conflict:['Sync conflict',true],'storage-error':['Storage unavailable',true]};const [label,warn]=modes[store.mode]||['Offline',true];return `<div class="sync-status" title="${label}"><span class="sync-dot ${warn?'warn':''}"></span><span>${label}${store.pending&&store.mode==='cloud'?' · Saving':''}</span></div>`;}
 function navitem(view,label,icon){return `<button data-action="view" data-view="${view}" class="navitem ${ui.view===view?'active':''}">${ico(icon)}${label}</button>`;}
-function shell(content){const active=current();return `<div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-icon">${ico('replay')}</span>Echo Studio</div>${navitem('home','Home','home')}${navitem('library','My Library','library')}${navitem('collections','Collections','folder')}${navitem('settings','Settings','settings')}<div class="sidebar-bottom"><button class="btn primary" style="width:100%" data-action="open-add">${ico('plus')} Add lessons</button></div></aside><div class="page"><header class="topbar"><div class="brand-mobile" ><span class="brand-icon">${ico('replay')}</span>Echo Studio</div><div class="top-actions">${syncHTML()}<button class="icon-btn" data-action="settings-shortcut" title="Settings" aria-label="Settings">${ico('settings')}</button></div></header>${syncBanner()}${content}</div></div><nav class="mobile-nav">${[['home','Home','home'],['library','Library','library'],['add','Add','plus'],['collections','Collections','folder'],['settings','Settings','settings']].map(([v,l,i])=>`<button data-action="${v==='add'?'open-add':'view'}" ${v==='add'?'aria-label="Add lessons"':`data-view="${v}"`} class="${ui.view===v?'active':''}">${ico(i)}${l}</button>`).join('')}</nav>${active&&ui.started&&ui.view!=='player'?compact():''}${ui.queue&&active?queue():''}${ui.modal?modal():''}${libraryUI.overlay()}${mirror.panel()}`;}
+function shell(content){const active=current();return `<div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-icon">${ico('replay')}</span>Echo Studio</div>${navitem('home','Home','home')}${navitem('library','My Library','library')}${navitem('collections','Collections','folder')}${navitem('settings','Settings','settings')}<div class="sidebar-bottom"><button class="btn primary" style="width:100%" data-action="open-add">${ico('plus')} Add lessons</button></div></aside><div class="page"><header class="topbar"><div class="brand-mobile" ><span class="brand-icon">${ico('replay')}</span>Echo Studio</div><div class="top-actions">${syncHTML()}<button class="icon-btn" data-action="settings-shortcut" title="Settings" aria-label="Settings">${ico('settings')}</button></div></header>${syncBanner()}${content}</div></div><nav class="mobile-nav">${[['home','Home','home'],['library','Library','library'],['add','Add','plus'],['collections','Collections','folder'],['search','Search','search']].map(([v,l,i])=>`<button data-action="${v==='add'?'open-add':v==='search'?'library-search':'view'}" ${v==='add'?'aria-label="Add lessons"':`data-view="${v}"`} class="${(v==='search'?ui.view==='library'&&libraryUI.searchOpen:ui.view===v&&!(v==='library'&&libraryUI.searchOpen))?'active':''}">${ico(i)}${l}</button>`).join('')}</nav>${active&&ui.started&&ui.view!=='player'?compact():''}${ui.queue&&active?queue():''}${ui.modal?modal():''}${libraryUI.overlay()}${mirror.panel()}`;}
 function syncBanner(){
  if(store.mode==='conflict')return `<div class="sync-banner"><span>A newer library copy is available.</span><button class="text-link" data-action="sync-details">Review</button></div>`;
  if(store.mode==='offline'||store.mode==='local')return `<div class="sync-banner"><span>Changes are saved on this device. Sync is unavailable.</span><button class="text-link" data-action="retry-sync">Retry</button></div>`;
@@ -41,7 +41,7 @@ function homeLessonCard(l){const pct=progressPercent(l);return `<div class="home
 function home(){
  const lessons=store.data.lessons,recents=[...lessons].sort((a,b)=>b.createdAt-a.createdAt),resume=lessons.find(l=>l.id===store.data.lastLessonId)||recents[0],favourites=lessons.filter(l=>l.favourite);
  return `<div class="section-header home-heading-row"><h1 class="heading">Your studio</h1><button class="btn primary" data-action="open-add">${ico('plus')} Add lessons</button></div>
- ${lessons.length?`<div class="search-field home-search">${ico('search')}<input id="library-search" aria-label="Search lessons" placeholder="Search lessons or speakers" value="${attr(ui.search)}"></div>`:''}
+
  ${resume?`<section class="resume-card"><img src="${attr(resume.thumbnail?.url||resume.frame?.url||`https://i.ytimg.com/vi/${resume.videoId}/mqdefault.jpg`)}" alt=""><div><span class="micro">Continue practising</span><h2>${esc(resume.title)}</h2><p class="muted">${resume.phrases.length} phrase${resume.phrases.length===1?'':'s'} · ${progressPercent(resume)}% practised</p><button class="btn primary" data-action="open-lesson" data-id="${resume.id}">${ico('play')} Resume lesson</button></div></section>`:`<section class="first-lesson"><div><h2>Bring a recording you want to practise.</h2><p class="muted">Add a YouTube link and a timestamped transcript. Listen, repeat and move forward at your own pace.</p><button class="btn primary" data-action="open-add">${ico('plus')} Create your first lesson</button></div></section>`}
  ${recents.length?`<div class="section-header"><h2 class="section-title">Recently added</h2><button class="text-link" data-action="view" data-view="library">All lessons</button></div><div class="lesson-grid">${recents.slice(0,6).map(homeLessonCard).join('')}</div>`:''}
  ${favourites.length?`<div class="section-header"><h2 class="section-title">Favourites</h2></div><div class="lesson-grid">${favourites.slice(0,6).map(homeLessonCard).join('')}</div>`:''}
@@ -148,7 +148,7 @@ function modal(){const m=ui.modal;let content='',title='',large=false;
 function ensureAmbient(lesson){const id=lesson.id;prepareAmbient(lesson,palette=>{const saved=store.data.lessons.find(l=>l.id===id);if(saved)store.mutate(()=>{saved.ambientPalette=palette;});});}
 function render(){
  const oldQueue=root.querySelector('#queue-list');const queuePosition=oldQueue?.scrollTop;const oldPhrase=oldQueue?.querySelector('.selected')?.dataset.rowId;
- const mirrorWasOpen=!!root.querySelector('.mirror-panel');const focused=document.activeElement;
+ const permissionWasOpen=!!root.querySelector('.mirror-permission');const mirrorWasOpen=!!root.querySelector('.mirror-panel');const focused=document.activeElement;
  const focusId=focused?.id;const libraryField=focused?.dataset?.lfield;const oldLibraryDialog=root.querySelector('.library-overlay .modal')?.getAttribute('aria-label');
  const selection=focused?.tagName==='TEXTAREA'||focused?.type==='text'?[focused.selectionStart,focused.selectionEnd]:null;
  const formValues=ui.modal&&!['add','replace'].includes(ui.modal.type)?[...root.querySelectorAll('.modal input[id]:not([type=file]):not([data-pref]):not(#audio-offset):not(#player-loop),.modal textarea[id],.modal select[id]:not([data-pref]):not(#speed):not(#lesson-media-source)')].map(e=>({id:e.id,value:e.value,checked:e.checked})):[];
@@ -158,7 +158,9 @@ function render(){
  const rangeFields=document.querySelector('.practice-range-fields');if(rangeFields)rangeFields.hidden=document.getElementById('practice-selection')?.value!=='range';
  if(libraryUI.dialog&&oldLibraryDialog!==root.querySelector('.library-overlay .modal')?.getAttribute('aria-label')){root.querySelector('.library-overlay input,.library-overlay select,.library-overlay button')?.focus({preventScroll:true});}else if(libraryField){root.querySelector(`[data-lfield="${CSS.escape(libraryField)}"]`)?.focus({preventScroll:true});}
  if(mirror.panelOpen&&!mirrorWasOpen)root.querySelector('#mirror-close-panel')?.focus({preventScroll:true});if(!mirror.panelOpen&&mirrorWasOpen)root.querySelector('#mirror-compare')?.focus({preventScroll:true});
- if(focusId){const e=document.getElementById(focusId);if(e){e.focus({preventScroll:true});if(selection&&e.setSelectionRange)e.setSelectionRange(...selection);}}
+ if(mirror.permissionOpen&&!permissionWasOpen)root.querySelector('#mirror-permission-close')?.focus({preventScroll:true});
+ if(permissionWasOpen&&!mirror.permissionOpen)root.querySelector('#mirror-main-record')?.focus({preventScroll:true});
+ if(focusId&&!mirror.permissionOpen){const e=document.getElementById(focusId);if(e){e.focus({preventScroll:true});if(selection&&e.setSelectionRange)e.setSelectionRange(...selection);}}
 }
 let playerLayoutFrame=0;
 function schedulePlayerLayout(){if(playerLayoutFrame)return;playerLayoutFrame=requestAnimationFrame(()=>{playerLayoutFrame=0;fitPhrase();layoutDock();});}
@@ -276,6 +278,9 @@ function action(name,data,e){const l=current();if(mirror.active&&['toggle','next
  case 'sync-details':ui.modal={type:'sync-details'};render();break;
  case 'player-settings':ui.modal={type:'player-settings',id:current()?.id};render();break;
  case 'seek-tools':ui.modal={type:'seek-tools'};render();break;
+ case 'library-search':mirror.exit();ui.view='library';ui.collectionId=null;libraryUI.state.course='';libraryUI.page=1;libraryUI.action('search');break;
+ case 'mirror-continue':mirror.continueRecording();break;
+ case 'mirror-permission-close':mirror.closePermission();break;
  case 'mirror-record':recorder.stop();ensureMirror();mirror.record();break;
  case 'mirror-original':ensureMirror();mirror.play('original');break;
  case 'mirror-panel':ensureMirror();mirror.togglePanel();break;
@@ -344,6 +349,7 @@ root.addEventListener('touchend',e=>{if(!touchStart||!e.changedTouches.length)re
 document.addEventListener('keydown',e=>{
  const overlay=document.querySelector('.modal')||document.querySelector('.queue-panel[role=dialog]');
  if(overlay){
+   if(e.key==='Escape'&&mirror.permissionOpen){e.preventDefault();mirror.closePermission();return;}
    if(e.key==='Escape'&&mirror.panelOpen){e.preventDefault();mirror.togglePanel();return;}
    if(e.key==='Escape'&&libraryUI.dialog){e.preventDefault();libraryUI.close();return;}
    if(e.key==='Escape'){e.preventDefault();if(ui.modal)closeModal();else{ui.queue=false;render();}return;}
