@@ -1,7 +1,7 @@
 /** Native audio presented through the same transport interface as the YouTube adapter. */
 export class AudioAdapter {
  constructor(file,offset=0,events={},factory=()=>new Audio()){
-  this.audio=factory();this.offset=Number(offset)||0;this.events=events;this.state=5;this.pendingTime=null;this.destroyed=false;this.listeners=[];
+  this.audio=factory();this.offset=Number(offset)||0;this.events=events;this.state=5;this.pendingTime=null;this.destroyed=false;this.listeners=[];this.playRequest=0;
   const on=(type,fn)=>{this.audio.addEventListener(type,fn);this.listeners.push([type,fn]);};
   const emit=state=>{if(this.destroyed)return;this.state=state;events.onStateChange?.({data:state});};
   this.ready=new Promise((resolve,reject)=>{
@@ -14,8 +14,8 @@ export class AudioAdapter {
  }
  cueVideoById({startSeconds=0}){this.seekTo(startSeconds);this.pauseVideo();}
  seekTo(seconds){this.pendingTime=seconds;if(this.audio.readyState>0){const target=Math.max(0,seconds+this.offset);this.audio.currentTime=Math.min(target,Number.isFinite(this.audio.duration)?Math.max(0,this.audio.duration-.001):target);this.pendingTime=null;}}
- playVideo(){const result=this.audio.play();result?.catch(e=>{if(this.destroyed)return;if(e.name==='NotAllowedError')this.events.onAutoplayBlocked?.();else this.events.onError?.({message:'Audio playback failed. Try replaying the phrase.'});});}
- pauseVideo(){this.audio.pause();}
+ playVideo(){const request=++this.playRequest;const result=this.audio.play();result?.catch(e=>{if(this.destroyed||request!==this.playRequest||e.name==='AbortError')return;if(e.name==='NotAllowedError')this.events.onAutoplayBlocked?.();else this.events.onError?.({message:'Audio playback failed. Try replaying the phrase.'});});}
+ pauseVideo(){this.playRequest++;this.audio.pause();}
  getCurrentTime(){return Math.max(0,(this.pendingTime??(this.audio.currentTime-this.offset)));}
  getDuration(){return Number.isFinite(this.audio.duration)?Math.max(0,this.audio.duration-this.offset):0;}
  getAvailablePlaybackRates(){return [.5,.75,1,1.25,1.5,1.75,2];}

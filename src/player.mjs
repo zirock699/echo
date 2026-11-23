@@ -19,7 +19,7 @@ export class PlayerEngine {
    this.wantsPlayback=false;this.phraseDone=false;this.mediaIdentity='';this.generation=0;this.yt=null;this.ready=false;this.initialising=null;this.error='';this.lesson=null;this.phrase=null;this.mode='manual';this.loop=false;this.playing=false;this.state='idle';
    this.speed=1;this.requestedSpeed=1;this.leadIn=.5;this.config={pauseType:'duration',fixedPause:4,multiplier:1.5};
    this.selection='all';this.range=null;this.speakers=[];this.time=0;this.duration=0;this.timer=null;this.waitTimer=null;this.token=0;this.lastSample=null;
-   this.onPractised=()=>{};this.activeSeconds=0;this.previewEnd=null;this.session=null;this.onChange=()=>{};this.onTick=()=>{};this.onError=()=>{};this.onSave=()=>{};this.lastSave=0;
+   this.seekTarget=null;this.seekRequestedAt=0;this.onPractised=()=>{};this.activeSeconds=0;this.previewEnd=null;this.session=null;this.onChange=()=>{};this.onTick=()=>{};this.onError=()=>{};this.onSave=()=>{};this.lastSave=0;
  }
  async initialise(){
    if(this.ready&&this.yt)return;
@@ -57,7 +57,7 @@ export class PlayerEngine {
        readyTimeout=setTimeout(()=>reject(Error('YouTube did not become ready. Check your connection and retry.')),18000);
      });
      clearTimeout(readyTimeout);if(generation!==this.generation)return;this.yt=loaded;this.ready=true;this.state='ready';this.error='';
-     if(this.lesson)this.yt.cueVideoById({videoId:this.lesson.videoId,startSeconds:this.time});
+     if(this.lesson){this.expectSeek(this.time);this.yt.cueVideoById({videoId:this.lesson.videoId,startSeconds:this.time});}
      this.applySpeed();this.onChange();clearInterval(this.timer);this.timer=setInterval(()=>this.tick(),100);
    }catch(e){clearTimeout(readyTimeout);if(generation!==this.generation)return;this.ready=false;this.state='error';this.error=e.message;this.onError(e.message);this.onChange();}
  }
@@ -88,7 +88,7 @@ export class PlayerEngine {
    if(rates.includes(this.requestedSpeed))this.yt?.setPlaybackRate(this.requestedSpeed);
  }
  handleYTState(s){
-   if(s===YT_STATES.PLAYING){this.wantsPlayback=true;this.error='';this.state='playing';this.playing=true;this.lastSample=null;this.startSession();}
+   if(s===YT_STATES.PLAYING){const actual=this.yt?.getCurrentTime?.();if(Number.isFinite(actual)&&this.seekSettled(actual)){if(!this.phrase||actual<this.phrase.start-this.leadIn-.1||actual>this.phrase.end+.25){this.time=actual;this.phrase=this.phraseAtOrNext(actual);this.phraseDone=false;}}this.wantsPlayback=true;this.error='';this.state='playing';this.playing=true;this.lastSample=null;this.startSession();}
    else if(s===YT_STATES.BUFFERING){if(this.wantsPlayback)this.state='buffering';this.playing=false;this.lastSample=null;}
    else if(s===YT_STATES.PAUSED){if(this.state!=='speaking-pause'){this.state='paused';this.playing=false;}this.lastSample=null;}
    else if(s===YT_STATES.ENDED){this.playing=false;this.state='ended';this.lastSample=null;if(this.mode!=='continuous')this.boundary();else this.complete();}
@@ -104,13 +104,15 @@ export class PlayerEngine {
    this.lesson=lesson;this.mode=prefs.mode||this.mode;this.speed=prefs.speed||this.speed;this.requestedSpeed=this.speed;this.leadIn=prefs.leadIn??this.leadIn;
    this.config={pauseType:prefs.pauseType||'duration',fixedPause:prefs.fixedPause||4,multiplier:prefs.multiplier||1.5,overrides:lesson.pauseOverrides||{}};
    this.selection='all';this.range=null;this.speakers=[];this.loop=false;
-   this.phrase=lesson.phrases.find(p=>p.id===lesson.progress.phraseId)||lesson.phrases[0];
-   this.time=lesson.progress?.position || this.phrase?.start || 0;this.phraseDone=!!this.phrase&&this.time>=this.phrase.end-.1;this.duration=lesson.duration||0;
+   const saved=lesson.phrases.find(p=>p.id===lesson.progress?.phraseId);
+   const position=Number(lesson.progress?.position);
+   this.time=Number.isFinite(position)&&position>0?position:saved?.start??lesson.phrases[0]?.start??0;
+   this.phrase=saved&&this.mode!=='continuous'&&this.time>=saved.start-this.leadIn&&this.time<=saved.end+.05?saved:this.phraseAtOrNext(this.time);this.phraseDone=!!this.phrase&&this.time>=this.phrase.end-.1;this.duration=lesson.duration||0;
    this.playing=false;this.state=this.ready?'ready':'loading';
-   if(this.ready&&this.yt){ if(changed)this.yt.cueVideoById({videoId:lesson.videoId,startSeconds:this.time});else this.yt.seekTo(this.time,true);this.applySpeed(); }
+   if(this.ready&&this.yt){ this.expectSeek(this.time);if(changed)this.yt.cueVideoById({videoId:lesson.videoId,startSeconds:this.time});else this.yt.seekTo(this.time,true);this.applySpeed(); }
    this.onChange();
  }
- cancel(){this.previewEnd=null;this.token++;if(this.waitTimer){clearTimeout(this.waitTimer);this.waitTimer=null;}this.lastSample=null;}
+ cancel(){this.seekTarget=null;this.previewEnd=null;this.token++;if(this.waitTimer){clearTimeout(this.waitTimer);this.waitTimer=null;}this.lastSample=null;}
  current(){return this.phrase;}
  eligible(){return this.lesson?selectedPhrases(this.lesson.phrases,this.lesson.statuses,this.selection,this.speakers,this.range):[];}
  setMode(mode){if(!['manual','automatic','continuous'].includes(mode))return;const wasPlaying=this.playing;this.cancel();this.mode=mode;this.yt?.pauseVideo();this.playing=false;this.state='paused';if(wasPlaying)this.play();this.onChange();this.onSave();}
@@ -123,19 +125,23 @@ export class PlayerEngine {
  seekPhrase(id,continuePlayback=this.playing){
    if(!this.lesson)return;const p=this.lesson.phrases.find(p=>p.id===id);if(!p)return;
    this.cancel();this.wantsPlayback=!!continuePlayback;this.phraseDone=false;this.phrase=p;this.time=Math.max(0,p.start-this.leadIn);
-   if(this.yt){this.yt.seekTo(this.time,true);if(continuePlayback)this.yt.playVideo();else this.yt.pauseVideo();}
+   if(this.yt){this.expectSeek(this.time);this.yt.seekTo(this.time,true);if(continuePlayback)this.yt.playVideo();else this.yt.pauseVideo();}
    this.playing=!!continuePlayback;this.state=continuePlayback?'playing':'paused';this.onChange();this.onTick();this.onSave();
  }
  seekRecording(time,continuePlayback=this.playing){
    if(!this.lesson)return;this.cancel();this.time=Math.max(0,Math.min(time,this.duration||Number.MAX_SAFE_INTEGER));
-   const p=this.resolvePhrase(this.time);if(p)this.phrase=p;
-   if(this.yt){this.yt.seekTo(this.time,true);if(continuePlayback)this.yt.playVideo();else this.yt.pauseVideo();}
+   this.phrase=this.phraseAtOrNext(this.time);this.phraseDone=false;
+   if(this.yt){this.expectSeek(this.time);this.yt.seekTo(this.time,true);if(continuePlayback)this.yt.playVideo();else this.yt.pauseVideo();}
    this.playing=!!continuePlayback;this.state=continuePlayback?'playing':'paused';this.onChange();this.onTick();this.onSave();
  }
  resolvePhrase(t){if(!this.lesson)return null;const p=this.lesson.phrases;let l=0,r=p.length-1,closest=null;
    while(l<=r){const m=(l+r)>>1;if(p[m].start<=t){closest=p[m];l=m+1;}else r=m-1;}
-   return closest && t<=closest.end+.15 ? closest : null;
+   for(let i=r;i>=0;i--)if(t<p[i].end)return p[i];
+   return null;
  }
+ expectSeek(time){this.seekTarget=time;this.seekRequestedAt=Date.now();}
+ seekSettled(time){if(this.seekTarget===null)return true;if(Math.abs(time-this.seekTarget)<=.5||Date.now()-this.seekRequestedAt>=1500){this.seekTarget=null;return true;}return false;}
+ phraseAtOrNext(time){return this.resolvePhrase(time)||this.lesson?.phrases.find(p=>p.start>=time)||this.lesson?.phrases.at(-1)||null;}
  play(){
    if(!this.lesson||!this.ready||!this.yt)return;
    if(this.state==='speaking-pause'){this.cancel();this.playing=false;this.state='paused';this.onChange();return;}
@@ -169,7 +175,7 @@ export class PlayerEngine {
  tick(){
    if(!this.ready||!this.yt||!this.lesson)return;
    try{
-     const cur=this.yt.getCurrentTime?.();if(!Number.isFinite(cur))return;
+     const cur=this.yt.getCurrentTime?.();if(!Number.isFinite(cur)||!this.seekSettled(cur))return;
      if(this.yt.getDuration){const dur=this.yt.getDuration();if(dur>0&&dur!==this.duration){this.duration=dur;if(!this.lesson.duration){this.lesson.duration=dur;this.onSave();}}}
      const prev=this.lastSample;
      if(this.playing && Number.isFinite(prev) && cur>prev && cur-prev<1.0){
