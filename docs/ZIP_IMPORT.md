@@ -1,10 +1,10 @@
 # ZIP courses and audio-first library
 
-Open **Library → Import**, choose a ZIP, review detected lessons and warnings, then select an existing course or name a new course. Course category/tags are optional and are never inferred from accent or content. Confirm to upload each lesson's audio and images to the existing authenticated private bucket and save its metadata through the versioned library API.
+Use **Add lessons → Import ZIP** from Home, Library, the mobile Add tab or desktop sidebar, choose a ZIP, review detected lessons and warnings, then select an existing course or name a new course. Course category/tags are optional and are never inferred from accent or content. Confirm to upload each lesson's audio and images to the existing authenticated private bucket and save its metadata through the versioned library API.
 
 Both `echo_media/<video-id>/…` and direct lesson folders work, including an additional enclosing folder. A manifest establishes ordering; missing or malformed manifests fall back to discovery. Metadata paths have conventional-filename fallbacks. Audio can be MP3, M4A, AAC, WAV, OGG, WebM or FLAC when supported by the browser. Invalid headers or undecodable audio are skipped. One failed lesson does not cancel valid lessons.
 
-Original SRT is retained verbatim in the lesson's `source` field; `transcriptAsset` identifies that source. Parsed cues are a separate editable layer. Missing or invalid transcripts produce audio-only lessons, with phrase-dependent actions disabled. Transcript replacement and the existing non-destructive regroup/undo tools remain available. Artwork prefers thumbnail, then frame, then a neutral placeholder. No YouTube media is extracted by Echo Studio.
+Valid captions survive malformed neighbouring cues; warnings identify skipped cues. Caption discovery tolerates case differences, conventional caption names, a unique SRT/VTT in the lesson folder and UTF-16 exports. Existing broken imports with recoverable stored source are repaired without resetting progress; otherwise re-import the package with **Repair missing transcripts only**, which retains audio and course membership. Original SRT is retained verbatim in the lesson's `source` field; `transcriptAsset` identifies that source. Parsed cues are a separate editable layer. Missing or invalid transcripts produce audio-only lessons, with phrase-dependent actions disabled. Transcript replacement and the existing non-destructive regroup/undo tools remain available. Artwork prefers thumbnail, then frame, then a neutral placeholder. No YouTube media is extracted by Echo Studio.
 
 ## Duplicates
 
@@ -18,7 +18,7 @@ A lesson has one parent course. Moving it preserves progress and removes its old
 
 ## Organisation
 
-Library search includes courses, lesson titles, source channels, categories and tags. Status chips combine with category/tag/course filters and recent/played/title/progress sorting. Pinned courses precede other courses. Course detail preserves the ordered lesson list and offers Continue, metadata/cover edits and accessible up/down reorder controls.
+Library defaults to Courses when courses exist; Lessons and Unassigned are separate views, avoiding duplicate course content on the landing screen. Search spans all courses and lessons. List/grid preferences are device-local. Results are paginated at 24 items, including inside courses; selection can explicitly include all filtered results across pages. ZIP preview/results are paginated at eight items and confirmation stays fixed outside the scrolling dialog body. Library search includes courses, lesson titles, source channels, categories and tags. Status chips combine with category/tag/course filters and recent/played/title/progress sorting. Pinned courses precede other courses. Course entry clears root-only filters and Back restores the prior filter/page context. Course detail preserves the ordered lesson list and offers Continue, metadata/cover edits and accessible up/down reorder controls.
 
 Use **Select** on any input device or long-press an item on touch screens. Select filtered items and apply valid bulk operations. Categories and tags can be managed across the library. Course deletion preserves its lessons by default; deleting contained lessons is a separate explicit choice. Destructive deletes require confirmation.
 
@@ -39,3 +39,7 @@ Use **Select** on any input device or long-press an item on touch screens. Selec
 Browser integration was exercised with generated valid WAV and encoded MP3 packages, including invalid audio, missing/invalid captions, skip/reuse/replace, microphone simulation, bulk tags, moves, pinning, refresh and 320/375/430/tablet/desktop/landscape layouts. Generated fixtures are test data, not production lessons. Real YouTube streaming and physical-device microphone behaviour remain separate checks.
 
 Preserve `.openai/hosting.json`. Building or pushing Git commits does not deploy the hosted Site. This environment exposes no deployment tool or authenticated deployment command; publish through the existing Site's supported workflow when available.
+
+## Scale boundaries
+
+Bounded rendering was regression-tested with 10,000 in-memory results; only 24 rows are mounted per page. This does not imply support for storing a million lessons. The existing backend still accepts at most 3,000 lessons and a 3 MB versioned metadata snapshot. Pagination solves unbounded DOM/scroll length, not those persistence limits. Larger-scale storage needs a separate per-lesson persistence/API migration.

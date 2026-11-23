@@ -1,3 +1,4 @@
+import {decodeCaption,parseImportedTranscript} from './import-transcript.mjs';
 /** Bounded ZIP reader: central-directory validation before any decompression. */
 import {parseTranscript,validateSegments,uid} from './transcript.mjs';
 export const LIMITS={archive:300*1024*1024,total:600*1024*1024,file:50*1024*1024,entries:5000};
@@ -19,7 +20,7 @@ export async function openZip(file){
   if(at>central.length||flags&1||![0,8].includes(method)||((d.getUint32(at-(46+n+extra+comment)+38,true)>>>16)&0xf000)===0xa000)throw Error('Encrypted, linked or unsupported ZIP entries are not allowed.');
   total+=length;if(length>LIMITS.file||total>LIMITS.total||(length>1024*1024&&length/Math.max(1,packed)>250))throw Error('ZIP exceeds safe decompression limits (50 MB per file, 600 MB total).');
   if(name.endsWith('/')||name.startsWith('__MACOSX/')||name.split('/').at(-1).startsWith('.'))continue;
-  if(!/\.(json|srt|jpg|jpeg|png|webp|mp3|m4a|aac|wav|ogg|webm|flac)$/i.test(name))throw Error(`Unsupported archive file: ${name}`);
+  if(!/\.(json|srt|vtt|jpg|jpeg|png|webp|mp3|m4a|aac|wav|ogg|webm|flac)$/i.test(name))throw Error(`Unsupported archive file: ${name}`);
   if(entries.has(name)||local+30+packed>offset)throw Error('Duplicate or damaged ZIP entry.');
   entries.set(name,{name,length,packed,method,local,crc});
  }
@@ -43,12 +44,14 @@ export async function inspectPackage(file,notify=()=>{}){
  for(const [index,folder] of ordered.entries()){
   const notes=[];let meta=manifest.find(m=>m?.video_id===folder.split('/').at(-1))||{};
   try{const local=await json(folder+'/metadata.json');if(local)meta={...meta,...local};else notes.push('Metadata missing; used folder filenames.');}catch{notes.push('Invalid metadata; used available manifest and filenames.');}
-  const resolve=(value,conventional)=>{if(typeof value==='string'){safePath(value);for(const candidate of [root+value,value,folder+'/'+value,folder+'/'+value.split('/').at(-1)])if(zip.entries.has(candidate))return candidate;}return conventional.find(n=>zip.entries.has(n));};
+  const lookup=name=>names.find(n=>n.toLowerCase()===name.toLowerCase());
+  const resolve=(value,conventional)=>{if(typeof value==='string'){safePath(value);for(const candidate of [root+value,value,folder+'/'+value,folder+'/'+value.split('/').at(-1)])if(lookup(candidate))return lookup(candidate);}return conventional.map(lookup).find(Boolean);};
   try{
    const audio=resolve(meta.audio,['mp3','m4a','aac','wav','ogg','webm','flac'].map(e=>folder+'/audio.'+e));
    const thumbnail=resolve(meta.thumbnail,[folder+'/thumbnail.jpg',folder+'/thumbnail.png',folder+'/thumbnail.webp']);const frame=resolve(meta.frame,[folder+'/frame.jpg',folder+'/frame.png']);
-   const transcript=resolve(meta.transcript,[folder+'/transcript.srt']);let source='',segments=[],phrases=[];
-   if(transcript){if(zip.entries.get(transcript).length>2*1024*1024)throw Error('Transcript exceeds 2 MB.');source=decoder.decode(await zip.read(transcript));try{const parsed=parseTranscript(source,'transcript.srt'),checked=validateSegments(parsed.segments);if(parsed.problems.length||checked.errors.length||!checked.segments.length)throw Error([...parsed.problems,...checked.errors].join('; ')||'No valid captions');segments=checked.segments;phrases=segments.map(s=>({...s,id:uid()}));notes.push(...checked.warnings);}catch(e){notes.push('Transcript unavailable: '+e.message);}}
+   const captionFiles=names.filter(n=>n.startsWith(folder+'/')&&!n.slice(folder.length+1).includes('/')&&/\.(srt|vtt)$/i.test(n));
+   const transcript=resolve(meta.transcript,[folder+'/transcript.srt',folder+'/captions.srt',folder+'/transcript.vtt',...(captionFiles.length===1?captionFiles:[])]);let source='',segments=[],phrases=[];
+   if(transcript){if(zip.entries.get(transcript).length>2*1024*1024)throw Error('Transcript exceeds 2 MB.');source=decodeCaption(await zip.read(transcript));const parsed=parseImportedTranscript(source,transcript);segments=parsed.segments;phrases=parsed.phrases;notes.push(...parsed.notes);if(!phrases.length)notes.push('Transcript unavailable: no valid timed speech cues.');}
    else notes.push('Transcript unavailable; audio-only playback.');
    const folderTitle=folder.split('/').at(-1).replace(/[_-]+/g,' '),title=String(meta.title||'').trim()||(!/^[a-zA-Z0-9_-]{11}$/.test(folder.split('/').at(-1))?folderTitle:`Lesson ${index+1}`);
    let error=!audio?'Audio file is missing.':!audioType(audio)?'Unsupported audio format.':null;if(audio&&!error&&!validAudio(await zip.read(audio),audioType(audio)))error='Audio file header is invalid or unsupported.';

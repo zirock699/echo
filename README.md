@@ -27,6 +27,10 @@ The build creates a Worker at `dist/server/index.js`, embedding the browser asse
 
 Use **Library → Import** for ZIP packages containing audio, captions, artwork and metadata. See [ZIP import, course management, storage limits and verification](docs/ZIP_IMPORT.md). Existing lessons and collections are retained.
 
+## Echo Mirror
+
+Timed audio lessons support listen-then-record practice with an expandable waveform comparison and explicitly saved device-local attempts. See [Echo Mirror behaviour, privacy and limits](docs/ECHO_MIRROR.md).
+
 ## Main files
 
 - `src/app.mjs`: views, importing, lesson settings, queue and event handling.
