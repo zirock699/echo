@@ -1,6 +1,6 @@
-import {repairStoredTranscripts,repairStoredTiming} from './import-transcript.mjs';
+import {repairStoredTranscripts} from './import-transcript.mjs';
 import {uid} from './transcript.mjs';
-export function migrateLibrary(data){if(!Array.isArray(data.courses))data.courses=[];if(!Array.isArray(data.categories))data.categories=[];if(!Array.isArray(data.tags))data.tags=[];for(const l of data.lessons){l.tags??=[];l.courseId??=null;l.completed??=false;}repairStoredTranscripts(data);repairStoredTiming(data);data.schemaVersion=2;return data;}
+export function migrateLibrary(data){if(!Array.isArray(data.courses))data.courses=[];if(!Array.isArray(data.categories))data.categories=[];if(!Array.isArray(data.tags))data.tags=[];for(const l of data.lessons){l.tags??=[];l.courseId??=null;l.completed??=false;}repairStoredTranscripts(data);data.schemaVersion=2;return data;}
 export function newCourse(title,category='',tags=[]){return {id:uid(),title:title.trim(),description:'',cover:null,category,tags,pinned:false,createdAt:Date.now(),updatedAt:Date.now(),lessonIds:[]};}
 export function lessonProgress(l){return l.completed?100:l.phrases?.length?Math.round(Object.values(l.statuses||{}).filter(s=>s.practised).length/l.phrases.length*100):l.duration?Math.min(99,Math.round((l.progress?.position||0)/l.duration*100)):0;}
 export function courseProgress(c,lessons){const index=lessons instanceof Map?lessons:new Map(lessons.map(l=>[l.id,l]));const list=c.lessonIds.map(id=>index.get(id)).filter(Boolean);return list.length?Math.round(list.reduce((s,l)=>s+lessonProgress(l),0)/list.length):0;}

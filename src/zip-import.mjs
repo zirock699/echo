@@ -55,7 +55,7 @@ export async function inspectPackage(file,notify=()=>{}){
    else notes.push('Transcript unavailable; audio-only playback.');
    const folderTitle=folder.split('/').at(-1).replace(/[_-]+/g,' '),title=String(meta.title||'').trim()||(!/^[a-zA-Z0-9_-]{11}$/.test(folder.split('/').at(-1))?folderTitle:`Lesson ${index+1}`);
    let error=!audio?'Audio file is missing.':!audioType(audio)?'Unsupported audio format.':null;if(audio&&!error&&!validAudio(await zip.read(audio),audioType(audio)))error='Audio file header is invalid or unsupported.';
-   lessons.push({folder,title,meta,audio,thumbnail,frame,transcript,source,segments,phrases,notes,error});
+   lessons.push({folder,title,meta,audio,thumbnail,frame,transcript,source,segments,phrases,grouping:'balanced',notes,error});
   }catch(e){lessons.push({folder,title:folder.split('/').at(-1),meta,notes,error:e.message});}
   notify(`Inspected ${index+1} of ${ordered.length} lessons`);await new Promise(r=>setTimeout(r,0));
  }

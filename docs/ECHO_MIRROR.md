@@ -25,3 +25,7 @@ YouTube-only lessons do not expose their audio for analysis and retain their exi
 ## Validation
 
 Unit tests cover waveform silence preservation, normalisation, attempt rotation, edited-source detection, delayed-permission cancellation, unsupported microphones and entry-position restoration. Browser checks use an encoded MP3 lesson and Chromium's simulated microphone to exercise listen/record/stop, closed comparison, two attempts, waveforms, explicit playback, local saving and saved-attempt refresh. Responsive checks cover 320/375/430px phones, tablet, desktop and short landscape. Physical microphones, iOS codecs and real-device interruption behaviour still need device testing.
+
+## Main transport after engine recovery
+
+Main Play/Pause/Replay always belongs to PlayerEngine, including after a recorded attempt or closing comparison. Main transport actions end the temporary Mirror playback session and restore its entry position before acting. Mirror original/attempt playback stays inside explicit recording/comparison actions. Saved and temporary attempts remain accessible.
