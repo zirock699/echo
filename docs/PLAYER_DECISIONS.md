@@ -32,3 +32,7 @@ The user explicitly requested recovery from the first application commit on main
 ## Synchronisation repairs preserve practice choices
 
 Fix media-clock/seek alignment directly. Do not reset an existing playback mode, lead-in or grouping preference as a synchronisation fix. Manual/Automatic resume must begin within the selected phrase or its configured lead-in; Repeat/Next must wait for the requested media clock before applying phrase-end logic. See `tests/seek-alignment.test.mjs`.
+
+## Mobile annotation changes, 23 November 2026
+
+Remove the player logo, phrase position badge and idle Echo Mirror line. Compare moves beside the settings gear. Keep the queue, IPA, phrase status actions, recording and practice modes accessible. Audio and YouTube mini players share a compact artwork strip with Close and horizontal swipe dismissal, which pause without deleting saved progress. YouTube pauses on navigation away from the full player; its mini Play reopens the visible 200 × 200 video. This supersedes the previous always-visible floating video card.

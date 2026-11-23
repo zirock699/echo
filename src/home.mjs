@@ -14,7 +14,7 @@ export function homeShelves(data,category=''){
  add('courses','Your courses',entries(recent.courses,'c'),{kind:'courses'});
  add('recent','Recently added',entries(recent.lessons,'l'),{kind:'lessons',sort:'recent'});
  add('favourites','Favourites',entries(queryLibrary(data,{filter:'favourites'}).lessons,'l'),{kind:'lessons',filter:'favourites'});
- for(const [i,name] of categoryValues(data).filter(name=>data.courses.some(c=>c.category===name)||data.lessons.some(l=>l.category===name)).slice(0,4).entries()){
+ for(const [i,name] of categoryValues(data).filter(name=>{const matches=queryLibrary(data,{category:name});return matches.courses.length||matches.lessons.length;}).slice(0,4).entries()){
   const matches=queryLibrary(data,{category:name});
   add('category-'+i,name,[...entries(matches.courses,'c'),...entries(matches.lessons,'l')],{kind:'all',category:name});
  }

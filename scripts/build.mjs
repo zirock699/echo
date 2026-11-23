@@ -3,7 +3,7 @@ import path from 'node:path';
 const mime={'.html':'text/html; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json'};
 const assets={};
 function add(file){assets['/'+file]={body:readFileSync(file).toString('base64'),type:mime[path.extname(file)]||'application/octet-stream'};}
-for(const file of ['index.html','sw.js','manifest.webmanifest'])add(file);
+for(const file of ['index.html','sw.js','manifest.webmanifest','tests/viewport.html'])add(file);
 for(const dir of ['src','assets'])for(const file of readdirSync(dir))add(dir+'/'+file);
 const audioServer=readFileSync('server/audio.mjs','utf8').replace('export async function','async function');
 let handler=readFileSync('server/worker.mjs','utf8').replace("import {handleAudio} from './audio.mjs';",'').replace('export default {','const apiHandler = {');

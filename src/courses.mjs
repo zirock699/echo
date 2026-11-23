@@ -1,3 +1,4 @@
+import {matchesCategoryRule} from './category-rules.mjs';
 import {repairStoredTranscripts} from './import-transcript.mjs';
 import {uid} from './transcript.mjs';
 export function migrateLibrary(data){if(!Array.isArray(data.courses))data.courses=[];if(!Array.isArray(data.categories))data.categories=[];if(!Array.isArray(data.tags))data.tags=[];for(const l of data.lessons){l.tags??=[];l.courseId??=null;l.completed??=false;}repairStoredTranscripts(data);data.schemaVersion=2;return data;}
@@ -8,11 +9,11 @@ export function moveLesson(data,id,courseId){const l=data.lessons.find(l=>l.id==
 export function queryLibrary(data,{query='',filter='all',category='',tag='',course='',sort='recent'}={}){
  const index=new Map(data.lessons.map(l=>[l.id,l]));const progress=new Map(data.courses.map(c=>[c.id,courseProgress(c,index)]));
  const match=(x)=>`${x.title} ${x.channel||x.speaker||''} ${x.category||''} ${(x.tags||[]).join(' ')}`.toLowerCase().includes(query.toLowerCase());
- const accept=(x,p)=>match(x)&&(!category||x.category===category)&&(!tag||x.tags?.includes(tag))&&(filter==='all'||filter==='pinned'&&x.pinned||filter==='favourites'&&x.favourite||filter==='progress'&&p>0&&p<100||filter==='new'&&p===0||filter==='complete'&&p===100);
+ const accept=(x,p)=>match(x)&&(!category||x.category===category||matchesCategoryRule(x,data.categoryRules?.[category],p))&&(!tag||x.tags?.includes(tag))&&(filter==='all'||filter==='pinned'&&x.pinned||filter==='favourites'&&x.favourite||filter==='progress'&&p>0&&p<100||filter==='new'&&p===0||filter==='complete'&&p===100);
  const order=(a,b)=>sort==='title'?a.title.localeCompare(b.title):sort==='played'?(b.progress?.updatedAt||b.lastPlayedAt||0)-(a.progress?.updatedAt||a.lastPlayedAt||0):sort==='progress'?lessonProgress(b)-lessonProgress(a):(b.importedAt||b.createdAt)-(a.importedAt||a.createdAt);
  return {courses:data.courses.filter(c=>!course&&accept(c,progress.get(c.id))).sort((a,b)=>Number(b.pinned)-Number(a.pinned)||(sort==='title'?a.title.localeCompare(b.title):sort==='progress'?progress.get(b.id)-progress.get(a.id):sort==='played'?(b.lastPlayedAt||0)-(a.lastPlayedAt||0):b.createdAt-a.createdAt)),lessons:data.lessons.filter(l=>(!course||l.courseId===course)&&accept(l,lessonProgress(l))).sort(order)};
 }
 
 export function pageItems(items,page=1,size=24){const pages=Math.max(1,Math.ceil(items.length/size)),current=Math.max(1,Math.min(pages,Number(page)||1));return {items:items.slice((current-1)*size,current*size),page:current,pages,total:items.length};}
 
-export function categoryValues(data){return [...new Set([...(data.categories||[]),...(data.courses||[]).map(c=>c.category),...(data.lessons||[]).map(l=>l.category)].filter(Boolean))].sort((a,b)=>a.localeCompare(b));}
+export function categoryValues(data){return [...new Set([...(data.categories||[]),...Object.keys(data.categoryRules||{}),...(data.courses||[]).map(c=>c.category),...(data.lessons||[]).map(l=>l.category)].filter(Boolean))].sort((a,b)=>a.localeCompare(b));}

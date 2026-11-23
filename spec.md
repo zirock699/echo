@@ -2,6 +2,10 @@
 
 Later requirements below override conflicting parts of the original specification.
 
+- Mobile annotation refinements, 23 November: no logo, phrase count badge or idle Echo Mirror text in the player. Compare is an icon beside the settings gear. Keep phrase position in the queue and practice flags in options.
+- Top-right gears consistently open settings. Library and collection management use separately labelled local action controls. Library tabs are slim chips with 44px touch targets; counts share the heading, and course/collection actions occupy one compact line.
+- Both mini players use a small artwork strip, close button and horizontal swipe dismissal. Dismiss pauses without deleting progress. YouTube pauses when leaving the full player; its mini Play reopens the visible 200 × 200 video. Uploaded audio continues while browsing.
+- Category presets are opt-in saved filters. Custom categories can combine keywords, course, tag and progress; existing manual assignments remain valid.
 - Mobile first. The player fills the visible viewport without page scrolling, including loading, buffering, errors, queue and settings states.
 - Text and audio are primary. The visible YouTube iframe is 200 × 200 pixels. Uploaded personal audio uses no video.
 - One main button changes Play/Pause/Replay. A quieter restart button restarts the current phrase and plays immediately. Next marks the current phrase Practised and immediately plays the next eligible phrase.
