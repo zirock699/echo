@@ -17,16 +17,16 @@ export function fmtTime(seconds, precise = false) {
 }
 const clean = s => String(s ?? '').replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
 export function parseSRT(text) {
-  const blocks = String(text).replace(/^\uFEFF/, '').replace(/\r/g, '').trim().split(/\n\s*\n/);
-  const segments = [], problems = [];
-  for (const b of blocks) {
-    const lines = b.trim().split('\n').map(x => x.trim());
-    const row = lines.findIndex(x => /\s*-->\s*/.test(x));
-    if (row < 0) { if (lines.some(x => /[a-z]/i.test(x))) problems.push('A caption block has no timestamp.'); continue; }
-    const [from, to] = lines[row].split(/\s*-->\s*/);
-    const start = parseTime(from), end = parseTime(to?.split(/\s/)[0]);
-    const content = clean(lines.slice(row + 1).join(' '));
-    segments.push({id:uid(),start,end,text:content});
+  const body=String(text).replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n').trim(),lines=body.split('\n').map(x=>x.trim());
+  const rows=lines.flatMap((line,index)=>line.includes('-->')?[index]:[]),segments=[],problems=[];
+  for(const block of body.split(/\n\s*\n/))if(!block.includes('-->')&&/[a-z]/i.test(block))problems.push('A caption block has no timestamp.');
+  for(const [index,row] of rows.entries()){
+    const next=rows[index+1]??lines.length;
+    let content=lines.slice(row+1,next);const blank=content.indexOf('');if(blank>=0)content=content.slice(0,blank);
+    // A numbered cue may follow immediately, without a blank separator.
+    if(blank<0&&next<lines.length&&content.length>1&&/^\d+$/.test(lines[row-1]||'')&&/^\d+$/.test(content.at(-1)))content.pop();
+    const [from,to]=lines[row].split(/\s*-->\s*/);
+    segments.push({id:uid(),start:parseTime(from),end:parseTime(to?.split(/\s/)[0]),text:clean(content.join(' '))});
   }
   return {segments,problems};
 }
@@ -124,25 +124,25 @@ export const TARGETS = {short:[2,4],balanced:[4,8],long:[8,15]};
 export function groupPhrases(segments, mode='balanced') {
   const [min,max]=TARGETS[mode] || TARGETS.balanced;
   const source=segments.filter(s=>isSpeech(s.text) && speechText(s.text));
-  const output=[];let group=[];
+  const output=[];let group=[],groupEnd=0;
   const flush=()=>{
     if (!group.length) return;
-    const first=group[0],last=group[group.length-1];
+    const first=group[0];
     const words=group.every(s=>Array.isArray(s.words)) ? group.flatMap(s=>s.words) : undefined;
-    output.push({id:uid(),start:first.start,end:last.end,text:group.map(s=>speechText(s.text)).join(' ').replace(/\s+/g,' ').trim(),speaker:group.every(s=>s.speaker===first.speaker)?first.speaker:undefined,segmentIds:group.map(s=>s.id),...(words?{words}:{})});
-    group=[];
+    output.push({id:uid(),start:first.start,end:groupEnd,text:group.map(s=>speechText(s.text)).join(' ').replace(/\s+/g,' ').trim(),speaker:group.every(s=>s.speaker===first.speaker)?first.speaker:undefined,segmentIds:group.map(s=>s.id),...(words?{words}:{})});
+    group=[];groupEnd=0;
   };
   for (const seg of source) {
     if (group.length) {
-      const prior=group.at(-1),gap=seg.start-prior.end;
-      const elapsed=seg.end-group[0].start;
+      const prior=group.at(-1),gap=seg.start-groupEnd;
+      const elapsed=Math.max(groupEnd,seg.end)-group[0].start;
       const previousEnd=/[.!?]["'”’]?\s*$/.test(prior.text);
       const punctuation=/[,;:]["'”’]?\s*$/.test(prior.text);
       const speakerChange=seg.speaker && prior.speaker && seg.speaker!==prior.speaker;
-      if (speakerChange || gap>.7 || (previousEnd && prior.end-group[0].start>=min*.55) || (punctuation && elapsed>=min && gap>.18) || elapsed>max*1.35) flush();
+      if (speakerChange || gap>.7 || (previousEnd && groupEnd-group[0].start>=min*.55) || (punctuation && elapsed>=min && gap>.18) || elapsed>max*1.35) flush();
     }
-    group.push(seg);
-    const duration=seg.end-group[0].start;
+    group.push(seg);groupEnd=Math.max(groupEnd,seg.end);
+    const duration=groupEnd-group[0].start;
     if (duration>=max || (duration>=min && /[.!?]["'”’]?\s*$/.test(seg.text))) flush();
   }
   flush();return output;
@@ -213,4 +213,17 @@ export function urlToVideoId(value) {
     }
     if (!/^[\w-]{11}$/.test(id||'')) throw Error();return id;
   } catch { throw new Error('Enter a valid YouTube watch, Shorts, embed or youtu.be link.'); }
+}
+
+/** Highlight only real supplied word intervals that map to the displayed text. */
+const wordMaps=new WeakMap();
+export function activeWordIndices(phrase,time){
+  if(!phrase?.words?.length||!Number.isFinite(time))return [];
+  let cached=wordMaps.get(phrase);
+  if(!cached||cached.text!==phrase.text||cached.words!==phrase.words){
+    const normal=t=>t.toLowerCase().replace(/[’‘]/g,"'").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu,''),display=phrase.text.trim().split(/\s+/).map(normal),mapping=[];let cursor=0,valid=true;
+    for(const word of phrase.words){const tokens=String(word.text||'').trim().split(/\s+/).map(normal),indices=[];for(const token of tokens){if(!token||token!==display[cursor])valid=false;indices.push(cursor++);}if(!Number.isFinite(word.start)||!Number.isFinite(word.end)||word.end<=word.start)valid=false;mapping.push(indices);}
+    cached={text:phrase.text,words:phrase.words,mapping:valid&&cursor===display.length?mapping:[]};wordMaps.set(phrase,cached);
+  }
+  return phrase.words.flatMap((word,index)=>time>=word.start&&time<word.end?cached.mapping[index]||[]:[]);
 }

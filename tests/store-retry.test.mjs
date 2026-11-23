@@ -19,3 +19,5 @@ test('conflicts stop automatic writes until the user chooses which copy to keep'
  await s.flush();t.mock.timers.tick(60000);await new Promise(setImmediate);
  assert.equal(calls,1);assert.equal(s.mode,'conflict');assert.equal(s.pending,true);
 });
+
+test('a confirmed stored timing repair is persisted once while ordinary migrations remain clean',t=>{t.mock.timers.enable({apis:['setTimeout']});const s=new Store(),bad={id:'p',start:0,end:1,text:'First. 2 00:00:01,000 --> 00:00:02,000 Second.'};s.data.lessons=[{id:'repair',format:'SRT',grouping:'original',source:'1\n00:00:00,000 --> 00:00:01,000\nFirst.\n2\n00:00:01,000 --> 00:00:02,000\nSecond.',segments:[bad],phrases:[bad],statuses:{},progress:{position:.5,coverage:[]}}];s.migrate();assert.equal(s.pending,true);assert.equal(s.seq,1);assert.equal(s.data.lessons[0].phrases.length,2);s.pending=false;s.migrate();assert.equal(s.pending,false);assert.equal(s.seq,1);});

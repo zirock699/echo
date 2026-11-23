@@ -7,7 +7,7 @@ async function cacheGet(key){const db=await openDB();return new Promise((resolve
 async function cacheSet(key,value){const db=await openDB();return new Promise((resolve,reject)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(value,key);tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>reject(tx.error);});}
 export class Store {
  constructor(){this.data=initialData();this.revision=0;this.mode='checking';this.pending=false;this.seq=0;this.conflict=null;this.onChange=()=>{};this.timer=null;this.saving=false;this.retryDelay=2000;}
- migrate(){const missing=new Set(this.data.lessons.filter(l=>l.importedAt&&!l.phrases?.length&&l.source).map(l=>l.id));migrateLibrary(this.data);if(this.data.lessons.some(l=>missing.has(l.id)&&l.phrases?.length)){this.pending=true;this.seq++;clearTimeout(this.timer);this.timer=setTimeout(()=>this.flush(),0);}}
+ migrate(){const missing=new Set(this.data.lessons.filter(l=>l.importedAt&&!l.phrases?.length&&l.source).map(l=>l.id)),timing=new Set(this.data.lessons.filter(l=>l.timingRepairVersion===1).map(l=>l.id));migrateLibrary(this.data);if(this.data.lessons.some(l=>missing.has(l.id)&&l.phrases?.length||l.timingRepairVersion===1&&!timing.has(l.id))){this.pending=true;this.seq++;clearTimeout(this.timer);this.timer=setTimeout(()=>this.flush(),0);}}
  async init(){
    try{const saved=await cacheGet('state');if(saved?.data){this.data={...initialData(),...saved.data,preferences:{...initialData().preferences,...saved.data.preferences}};this.revision=saved.revision||0;this.pending=!!saved.pending;}}catch(e){console.warn('IndexedDB unavailable',e);this.mode='storage-error';}
    this.migrate();this.onChange();await this.connect();

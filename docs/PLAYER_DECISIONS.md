@@ -20,3 +20,7 @@ The user ended the interview and authorised implementation and deployment of the
 ## Follow-up visual correction
 
 The user rejected the oversized, sparse player, bulky notices and poor option discoverability. The revised layout uses a smaller, cohesive stage and readable text scale. Next remains visible as a secondary action and gains emphasis after phrase completion. Queue and Options have visible text labels. Options groups existing controls into Playback, Practice and Lesson tabs. Inactive range fields stay hidden until a range is selected. Brief notices link to details instead of displaying long explanations on the player.
+
+## Synchronisation implementation
+
+See [PLAYBACK_SYNC.md](PLAYBACK_SYNC.md) for the confirmed seek/clock/parser defects, source-offset rules, regression workflow and live YouTube verification limitation. These corrections preserve the practice decisions above and introduce no layout redesign.
