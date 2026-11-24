@@ -43,3 +43,16 @@ The YouTube embed loads, but its video remains at readyState 0/time 0 in this cl
 Player bounds were measured at 320 × 568, 331 × 518, 390 × 844, 515 × 515, 768 × 1024, 1440 × 900 and 844 × 390. Document dimensions matched each viewport, and the footer remained within it. Screenshots were inspected for the compact phone player, library cards/selection/course controls, collection overview/detail, settings in both themes and short landscape. Final text-centering and header-style corrections are checked again after publication.
 
 The cloud library is being updated from another device during testing. Conflicts remain explicit; test changes must not overwrite the newer cloud copy. No private transcripts, exports or source audio are committed.
+
+## Follow-up set, 24 November 2026
+
+| Comment | Implementation | Verification |
+| --- | --- | --- |
+| 1 | Final See all card in every shelf, with four real member thumbnails and the shelf's full destination. | Four image tiles and last-card position inspected; course card opens the complete Courses Library. Destination/filter matching and artwork expansion covered by tests. |
+| 2 | Home category strip removed. | Hosted DOM and screenshots show no category strip; category shelves/management remain available. |
+| 3 | Phrase seek slider restored beside supporting controls on the player. | Keyboard Home/Right changes the real uploaded-audio phrase position; clock updates; no page overflow. |
+| 4 | Mobile swipes across the phrase stage; up to five phrases, faded by distance; context reduces with available height. | Five visible at 390 by 844, three at 320 by 568 audio, current phrase only on short YouTube/landscape. Eligible queue edge cases tested. Physical touch still needs phone testing. |
+| 5 | Compact sparse shelves, real Keep practising/Not started sections, and complete-list artwork cards. | Home screenshots inspected in dark/light mobile and dark 1280 by 800 desktop. No horizontal document overflow. |
+| 6 | Update search results without replacing the input; preserve search selections through other app renders; defer composition updates. | Continuous typing of philosophy and insertion of test before the last two characters retained correct order and cursor. Composition and stable-input regressions covered by tests. |
+
+Hosted checks used the signed-in existing app and saved audio/YouTube lessons. Player dimensions were checked at 320 by 568, 390 by 844, 768 by 1024 and 844 by 390; Home also at 1280 by 800. Dark and light Home/player screenshots were inspected; original Dark preference restored. A 200% text check kept the player within its viewport. These checks do not prove real YouTube streaming or physical mobile gestures. Localhost browser QA was rejected by automatic approval review in favour of the authorised hosted Site. No new transcript or media data is committed.

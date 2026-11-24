@@ -12,3 +12,10 @@ export function swipeDirection(start,end,width){
 }
 /** Dismiss a mini player only for a deliberate horizontal swipe. */
 export function dismissCompactSwipe(start,end){if(!start||!end)return false;const dx=end.x-start.x,dy=end.y-start.y;return Math.abs(dx)>70&&Math.abs(dx)>Math.abs(dy)*1.8;}
+
+/** Context follows the same eligible phrase order as Next/Previous, never fabricated timing. */
+export function phraseNeighbours(phrases,currentId){
+ const index=phrases.findIndex(p=>p.id===currentId);
+ if(index<0)return {before:[],after:[]};
+ return {before:phrases.slice(Math.max(0,index-2),index),after:phrases.slice(index+1,index+3)};
+}

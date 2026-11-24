@@ -14,14 +14,34 @@ body.view-player::after { display:none; }
 .audio-only .practice-body { grid-template-rows:minmax(0,1fr); }
 .phrase-panel,.audio-only .phrase-panel { width:100%; height:100%; min-height:0; min-width:0; padding:0; display:grid; grid-template-rows:minmax(0,1fr); grid-template-columns:minmax(0,1fr); align-items:stretch; align-content:stretch; overflow:hidden; }
 .phrase-text { display:grid; align-content:safe center; height:100%; min-height:0; max-height:100%; padding:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:var(--player-line) transparent; }
+
 .phrase-inner { min-width:0; }
+.phrase-context { display:none; min-height:0; min-width:0; overflow:hidden; flex-direction:column; gap:14px; padding-inline:8px; text-align:center; color:var(--player-text); pointer-events:none; }
+.context-before { justify-content:flex-end; padding-bottom:18px; }
+.context-after { justify-content:flex-start; padding-top:18px; }
+.context-line { display:none; font-size:clamp(16px,1.5vw,23px); line-height:1.4; overflow:hidden; overflow-wrap:anywhere; }
+.context-1 { opacity:.48; }
+.context-2 { opacity:.22; }
+.phrase-panel.context-few { grid-template-rows:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr); }
+.context-few .phrase-context { display:flex; }
+.context-few .context-1,.context-many .context-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; flex-shrink:0; }
+.phrase-panel { touch-action:pan-y; }
+
 .media-info,.video-slot { width:200px; height:200px; min-width:200px; min-height:200px; border-radius:12px; justify-self:center; align-self:center; }
 .youtube-dock { border:0; box-shadow:none; border-radius:12px; }
 .youtube-dock.dock-compact { min-width:0; min-height:0; border-radius:6px; pointer-events:none; }
 .youtube-dock.dock-compact iframe,.youtube-dock.dock-compact>div { width:200px; height:200px; transform:scale(.2); transform-origin:top left; }
 .swipe-zone { grid-row:2; display:block; height:100%; min-height:0; touch-action:pan-y; user-select:none; }
 .practice-footer { grid-row:3; width:100%; height:100%; min-height:0; display:grid; grid-template-rows:44px minmax(0,1fr); align-items:center; justify-items:center; gap:0; padding:0; margin:0; }
-.player-tools { display:flex; align-items:center; justify-content:center; gap:8px; }
+.player-utility-row { display:flex; align-items:center; gap:12px; width:100%; max-width:680px; min-width:0; }
+.phrase-timeline { flex:1; min-width:0; display:grid; grid-template-rows:28px 16px; align-items:center; }
+.phrase-timeline input { width:100%; min-width:0; height:28px; margin:0; cursor:pointer; touch-action:pan-y; }
+.player-page .phrase-timeline input::-webkit-slider-runnable-track { background:linear-gradient(to right,var(--player-accent) var(--progress),var(--player-line) var(--progress)); }
+.player-page .phrase-timeline input::-webkit-slider-thumb { background:var(--player-accent); box-shadow:none; }
+.player-page .phrase-timeline input::-moz-range-track { background:var(--player-line); }
+.player-page .phrase-timeline input::-moz-range-progress,.player-page .phrase-timeline input::-moz-range-thumb { background:var(--player-accent); }
+.phrase-timeline span { color:var(--player-sub); font-size:12px; line-height:16px; font-variant-numeric:tabular-nums; }
+.player-tools { display:flex; flex:none; align-items:center; justify-content:center; gap:0; }
 .player-tools .icon-btn { width:44px; height:44px; color:var(--player-sub); }
 .player-tools .icon-btn svg { width:18px; height:18px; }
 .player-content,body.view-player.queue-open .player-content { width:100%; max-width:1240px; margin:0 auto; }
@@ -55,9 +75,11 @@ body.light .player-artwork { filter:blur(18px); opacity:.35; }
  .player-tools .player-fullscreen { display:none; }
  .player-content,.mirror-enabled .player-content,body.view-player.queue-open .player-content { width:100%; max-width:560px; margin:0 auto; padding:0 max(16px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); grid-template-rows:minmax(0,1fr) 24px 116px; gap:6px; }
  .practice-body { gap:10px; }
+ .context-line { font-size:17px; line-height:1.4; }
  .phrase-text { font-size:clamp(29px,7.2vw,42px); line-height:1.3; letter-spacing:-.02em; }
  .phrase-text.long { font-size:clamp(25px,6.2vw,36px); line-height:1.3; }
  .phrase-text.very-long { font-size:clamp(23px,5.8vw,30px); line-height:1.35; }
+ .player-utility-row { gap:8px; }
  .practice-actions,.mirror-enabled .practice-actions { gap:16px; }
  .practice-actions .mirror-split { width:156px; height:68px; }
  .practice-actions .mirror-main-record { width:56px; }

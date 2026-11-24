@@ -40,3 +40,9 @@ Remove the player logo, phrase position badge and idle Echo Mirror line. Compare
 The later annotations remove the permanent timeline from the player footer. Seeking remains available in Options. Short layouts prioritise readable text and compact transport, with source artwork in the background and the YouTube viewport visually integrated into its layout slot.
 
 Latest correction: the course toolbar has one management menu, alongside Continue, Filter and Layout. Player top-right contains only the gear; clock, Queue, Compare and desktop fullscreen form a quiet tool row above transport. YouTube remains playing when minimised. The compact live viewport is an explicit user-requested exception to the earlier 200 × 200-only rule; full-player sizing and synchronisation remain intact. Close still pauses and dismisses either source.
+
+## Follow-up annotations, 24 November 2026
+
+The current-phrase seek slider returns to the main player alongside the supporting controls. Full-recording seeking remains on demand. This supersedes the earlier removal of both timelines.
+
+The phrase stage shows up to five phrases, with the current phrase dominant and neighbours fading with distance. Context reduces to three or one phrase when height is limited. Deliberate mobile horizontal swipes work across this stage and the existing gap. They keep Next/Previous semantics, ignore vertical scrolling and text selection, and suppress the trailing word click after a swipe. Ordinary word taps still open IPA. No timing or grouping changes are introduced.

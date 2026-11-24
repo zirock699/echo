@@ -5,3 +5,20 @@ test('search history deduplicates, bounds retained terms and preserves entered s
 test('search history can remove individual entries and clear all without changing library data',()=>{const data=fixture(),store={data,mutate:f=>f(data)},ui=new SearchUI(store,()=>{},{lesson:()=>{}});const before=structuredClone(data.lessons);ui.query='Speaking';ui.action('submit');ui.query='British';ui.action('submit');ui.action('remove-history',{value:'Speaking'});assert.deepEqual(data.preferences.searchHistory,['British']);ui.action('clear-history');assert.deepEqual(data.preferences.searchHistory,[]);assert.deepEqual(data.lessons,before);});
 test('search result navigation records the query and opens the requested type',()=>{const data=fixture(),opened=[],ui=new SearchUI({data,mutate:f=>f(data)},()=>{},{course:id=>opened.push(id)});ui.query='Speaking';ui.action('open',{kind:'course',id:'course'});assert.deepEqual(opened,['course']);assert.deepEqual(data.preferences.searchHistory,['Speaking']);});
 test('mobile library loads the next results without duplicate rows or pagination controls',t=>{const previous=globalThis.matchMedia;globalThis.matchMedia=()=>({matches:true});t.after(()=>{globalThis.matchMedia=previous;});const data=fixture();data.lessons=Array.from({length:70},(_,i)=>({...data.lessons[0],id:'lesson-'+i,title:'Lesson '+i,createdAt:i}));const ui=new LibraryUI({data},()=>{},()=>{});ui.kind='lessons';let html=ui.view();assert.equal((html.match(/data-library-key=/g)||[]).length,24);assert.ok(html.includes('data-load-more="library"'));assert.ok(!html.includes('aria-label="Library pages"'));ui.action('more');html=ui.view();assert.equal((html.match(/data-library-key=/g)||[]).length,48);assert.equal(new Set([...html.matchAll(/data-library-key="([^"]+)/g)].map(m=>m[1])).size,48);ui.action('kind',{kind:'unassigned'});assert.equal(ui.mobileLimit,24);});
+
+test('composing search text is not replaced until composition finishes',()=>{
+ const data=fixture(),listeners={},renders=[];const ui=new SearchUI({data},()=>renders.push(ui.query),{});
+ ui.bind({addEventListener:(name,callback)=>{listeners[name]=callback;}});
+ const target={id:'search-query',value:'philosophy'};
+ listeners.compositionstart({target});listeners.input({target,isComposing:true});assert.deepEqual(renders,[]);
+ listeners.compositionend({target});assert.deepEqual(renders,['philosophy']);
+ target.value='philosophy books';listeners.input({target,isComposing:false});assert.equal(renders.at(-1),'philosophy books');
+});
+
+test('typing updates only results and never replaces the search field',()=>{
+ const data=fixture(),listeners={},results={innerHTML:''},clear={hidden:true},field={value:'Speaking',selectionStart:4,selectionEnd:4};let renders=0,updates=0;
+ const root={addEventListener:(name,callback)=>{listeners[name]=callback;},querySelector:selector=>selector==='#search-results'?results:selector==='[data-sx="clear"]'?clear:selector==='#search-query'?field:null};
+ const ui=new SearchUI({data},()=>renders++,{});ui.onResults=()=>updates++;ui.bind(root);
+ listeners.input({target:{id:'search-query',value:field.value},isComposing:false});
+ assert.equal(renders,0);assert.equal(updates,1);assert.equal(root.querySelector('#search-query'),field);assert.equal(field.selectionStart,4);assert.equal(clear.hidden,false);assert.ok(results.innerHTML.includes('Speaking course'));
+});

@@ -2,6 +2,7 @@
 
 Later requirements below override conflicting parts of the original specification.
 
+- Annotations, 24 November: Home has no category strip. Every shelf ends in a four-thumbnail See all card opening its complete destination. Keep practising and Not started use real lesson progress; sparse shelves use compact rows. Phrase seeking is visible beside supporting tools. The player shows up to two preceding and two following phrases, faded by distance and reduced on short screens. Deliberate mobile swipes work across the phrase stage as well as the gap; word taps and text selection remain available. Search updates results without replacing the input or interrupting composition.
 - Mobile annotation refinements, 23 November: no logo, phrase count badge or idle Echo Mirror text in the player. Only the settings gear remains at the top right; Compare and Queue sit beside the clock below the phrase. Keep phrase position in the queue and practice flags in options.
 - Top-right gears consistently open settings. Library and collection management use separately labelled local action controls. Library tabs are slim chips with 44px touch targets; counts share the heading, and course/collection actions occupy one compact line.
 - Both mini players use a small artwork strip, close button and horizontal swipe dismissal. Dismiss pauses without deleting progress. YouTube continues playing in the compact bar, with a small live video viewport. Uploaded audio continues while browsing.
@@ -10,7 +11,7 @@ Later requirements below override conflicting parts of the original specificatio
 - Mobile first. The player fills the visible viewport without page scrolling, including loading, buffering, errors, queue and settings states.
 - Text and audio are primary. The visible YouTube iframe is 200 × 200 pixels. Uploaded personal audio uses no video.
 - One main button changes Play/Pause/Replay. A quieter restart button restarts the current phrase and plays immediately. Next marks the current phrase Practised and immediately plays the next eligible phrase.
-- Mobile left swipe in the gap between text and controls behaves exactly like Next. Right swipe plays the previous phrase without marking. Do not apply gestures to text or the queue.
+- Mobile left swipe in the gap between text and controls behaves exactly like Next. Right swipe plays the previous phrase without marking. Horizontal phrase-stage gestures are supported by the 24 November update. Do not apply gestures to the queue or text selection.
 - Loading and buffering use an indicator inside the main button. Other short playback feedback stays in a fixed metadata row. Detailed errors are available on demand.
 - Keep secondary options and full recording position in sheets. Queue is a desktop sidebar and mobile sheet. No unlimited-loop control.
 - Normal listening follows the first application (`f69042d`): Continuous playback, original source cues, zero lead-in, no automatic cut at cue ends. Manual/Automatic remain explicit shadowing modes. Unedited generated lessons recover once with backups; deliberate transcript edits and existing playback preferences are preserved. Synchronisation repairs must not force a different practice mode.

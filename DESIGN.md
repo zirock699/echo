@@ -224,3 +224,9 @@ Search is a separate screen for lessons, courses and collections, with type chip
 Mobile Library results extend automatically near the end of the loaded list, with a Load more fallback. Desktop retains paginated results. Reset the loaded count when changing filters or content types; preserve existing selection while extending results. Grid cards use source artwork with a small visual menu inside a 44px touch target, title and creator, and quiet progress. Settings use compact inset rows and native value selectors; collection headings, spacing and controls share the same browsing system.
 
 The player reserves space for the phrase before secondary chrome. Timelines move into Options, leaving one balanced transport row and a dedicated swipe area. A dimmed source image supplies context behind readable text. The visible YouTube viewport stays 200 × 200 and occupies a defined stage slot, with no floating shadow. Short portrait and landscape layouts must keep the phrase and all controls reachable without page scrolling.
+
+## Home and phrase-stage refinements, 24 November 2026
+
+Remove Home's category chip strip; category shelves, filters and management remain. Every shelf ends in a See all destination with a 2 by 2 collage of real member-lesson thumbnails. With fewer than four members, repeat available artwork; never invent lesson content. Sparse shelves use compact horizontal entries to avoid an oversized single-card section. Keep practising and Not started are deterministic progress filters, not generated recommendations.
+
+Current-phrase seeking is visible in the utility row beside Queue and the other tools. The full-recording timeline remains on demand. Up to two neighbouring phrases on each side supply reading context, at decreasing opacity and with shorter-screen reductions. Current text remains the primary readable content. Search preserves the actual input element while updating results, including composition and cursor edits.
