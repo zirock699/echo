@@ -46,3 +46,9 @@ Latest correction: the course toolbar has one management menu, alongside Continu
 The current-phrase seek slider returns to the main player alongside the supporting controls. Full-recording seeking remains on demand. This supersedes the earlier removal of both timelines.
 
 The phrase stage shows up to five phrases, with the current phrase dominant and neighbours fading with distance. Context reduces to three or one phrase when height is limited. Deliberate mobile horizontal swipes work across this stage and the existing gap. They keep Next/Previous semantics, ignore vertical scrolling and text selection, and suppress the trailing word click after a swipe. Ordinary word taps still open IPA. No timing or grouping changes are introduced.
+
+## Continuous transcript and music-player header, 24 November 2026
+
+The next three annotations supersede the spaced context blocks. Use one persistent, internally scrollable transcript with close, natural line spacing. Native smooth scrolling follows active phrase changes in either direction; initial positioning and reduced-motion positioning are instant. Manual browsing stops automatic following until the user chooses a line, uses a transport navigation control, or selects Current phrase. A direct line selection plays that phrase without marking skipped phrases. Existing Next still marks Practised. Active words retain IPA actions.
+
+The compact header pairs source artwork with a two-line title and creator, with collapse/back on the left and the gear on the right. Header, lyrics and controls share one continuous artwork backdrop and gradual tonal overlay. The main page remains fixed to the viewport; transcript scrolling is intentional and contained.

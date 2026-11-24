@@ -56,3 +56,15 @@ The cloud library is being updated from another device during testing. Conflicts
 | 6 | Update search results without replacing the input; preserve search selections through other app renders; defer composition updates. | Continuous typing of philosophy and insertion of test before the last two characters retained correct order and cursor. Composition and stable-input regressions covered by tests. |
 
 Hosted checks used the signed-in existing app and saved audio/YouTube lessons. Player dimensions were checked at 320 by 568, 390 by 844, 768 by 1024 and 844 by 390; Home also at 1280 by 800. Dark and light Home/player screenshots were inspected; original Dark preference restored. A 200% text check kept the player within its viewport. These checks do not prove real YouTube streaming or physical mobile gestures. Localhost browser QA was rejected by automatic approval review in favour of the authorised hosted Site. No new transcript or media data is committed.
+
+## Continuous transcript follow-up, 24 November 2026
+
+| Comment | Implementation |
+| --- | --- |
+| 1 | Replace spaced context blocks with a persistent transcript scroller. Closer line spacing, active-line emphasis and fading neighbours. Clicking or keyboard-activating a line plays it; scroll freely in either direction and return to the active line. Native smooth following, instant initial/reduced-motion positioning, and scroll preservation through transport renders. |
+| 2 | Artwork-led music-player header with a two-line lesson title, creator, collapse control and gear. No app branding or phrase badges. |
+| 3 | One artwork backdrop and gradual overlay across the full player, with transparent header/control surfaces. |
+
+The hosted player was inspected with real uploaded audio: direct forward/backward line selection, keyboard browsing, return to the active phrase, current-word actions and native scroll positioning. Regression tests cover centring, reduced motion, and preservation of the exact reading node and manual scroll position across transport renders. These checks do not establish physical touch behaviour or successful YouTube streaming. The transcript scrolls inside the fixed player; this is distinct from unwanted document scrolling.
+
+Final continuous-transcript screenshots were inspected at 320 by 568 and 390 by 844 in dark mode, at 390 by 844 in light mode, and at 844 by 390 and 1280 by 800 in dark mode. The main document stayed within the viewport; the transcript remained independently scrollable. The return action sits outside the transcript edge mask so it stays readable. The light header's inherited background was removed after inspection to keep the backdrop continuous.

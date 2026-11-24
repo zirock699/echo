@@ -230,3 +230,9 @@ The player reserves space for the phrase before secondary chrome. Timelines move
 Remove Home's category chip strip; category shelves, filters and management remain. Every shelf ends in a See all destination with a 2 by 2 collage of real member-lesson thumbnails. With fewer than four members, repeat available artwork; never invent lesson content. Sparse shelves use compact horizontal entries to avoid an oversized single-card section. Keep practising and Not started are deterministic progress filters, not generated recommendations.
 
 Current-phrase seeking is visible in the utility row beside Queue and the other tools. The full-recording timeline remains on demand. Up to two neighbouring phrases on each side supply reading context, at decreasing opacity and with shorter-screen reductions. Current text remains the primary readable content. Search preserves the actual input element while updating results, including composition and cursor edits.
+
+## Continuous transcript follow-up
+
+The transcript is a persistent reading surface, not independently spaced before/current/after panels. Adjacent lines use a natural 24px mobile gap and consistent type size. The active line gains weight and contrast. Distance fading remains while following; manual browsing raises inactive text contrast for reading. Native smooth scrolling follows selections and playback; initial positioning and reduced motion are instant. Keep scroll position and DOM identity through transport renders.
+
+Source artwork, two-line title and creator form one compact header cluster between collapse/back and the gear. The full player uses a single artwork backdrop and gradual overlay; header and footer have no separate background slabs.

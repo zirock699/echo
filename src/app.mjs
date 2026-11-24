@@ -1,3 +1,4 @@
+import {LyricsScroller} from './lyrics.mjs';
 import {SearchUI} from './search-ui.mjs';
 import {uiIcon} from './ui-icons.mjs';
 import {ScreenHistory} from './navigation.mjs';
@@ -12,10 +13,10 @@ import {parseTranscript,validateSegments,groupPhrases,activeWordIndices,remapSta
 import {lookupIPA,phraseIPA,normalWord} from './ipa.mjs';
 import {Store,createLesson,initialData} from './store.mjs';
 import {PlayerEngine,warmYouTube,usesUploadedAudio} from './player.mjs';
-import {transportState,swipeDirection,dismissCompactSwipe,phraseNeighbours} from './practice.mjs';
+import {transportState,swipeDirection,dismissCompactSwipe} from './practice.mjs';
 import {applyAmbient,prepareAmbient} from './ambient.mjs';
-import {playbackFeedback,fitTextSize} from './player-layout.mjs';
-const store=new Store(),player=new PlayerEngine();
+import {playbackFeedback} from './player-layout.mjs';
+const store=new Store(),player=new PlayerEngine(),lyrics=new LyricsScroller();
 const ui={started:false,compactDismissed:false,preparing:false,uploading:false,uploadError:'',queueWasPlaying:false,view:'home',search:'',libraryFilter:'all',sort:'recent',collectionId:null,modal:null,optionsTab:'playback',recordingOpen:false,queue:false,queueLimit:80,queueMenu:null,homeCategory:'',syncDismissed:false,syncRetrying:false,word:null,import:{url:'',title:'',speaker:'',text:'',fileName:'',offset:0,grouping:'original',preview:null,errors:[],warnings:[],format:''},pendingSummary:null,refocus:null};
 const root=document.querySelector('#app'),dock=document.querySelector('#youtube-dock'),toaster=document.querySelector('#toast');
 const libraryUI=new LibraryUI(store,()=>render(),id=>openLesson(id));libraryUI.bind(root);libraryUI.onLegacy=()=>action('youtube-add',{},{});libraryUI.onLibrary=()=>{ui.view='library';ui.collectionId=null;};libraryUI.onSettings=()=>{ui.view='settings';render();};libraryUI.onAssetsChanged=id=>{const l=store.data.lessons.find(l=>l.id===id);if(l)reloadSource(l);};
@@ -89,25 +90,18 @@ function collections(){return collectionsUI.view();}
 function settings(){const p=pref();const field=(title,desc,control)=>{const tag=/<(?:input|select)\b/.test(control)&&!/<label\b/.test(control)?'label':'div';return `<${tag} class="setting-row"><span><strong>${title}</strong><small>${desc}</small></span>${control}</${tag}>`;};const select=(name,choices)=>`<select data-pref="${name}" aria-label="${name}">${choices.map(([v,l])=>`<option value="${v}" ${String(p[name])===String(v)?'selected':''}>${l}</option>`).join('')}</select>`;return `<header class="screen-appbar"><button class="icon-btn" data-action="back" aria-label="Back">${ico('chevron')}</button><h1>Settings</h1></header><div class="settings-card"><h2 class="section-title">Appearance</h2>${field('Theme','Choose a look or follow your device.',select('theme',[['dark','Dark'],['light','Light'],['system','System']]))}${field('Phrase text','Show the words during playback.',`<input data-pref="showText" type="checkbox" ${p.showText?'checked':''} aria-label="Show phrase text">`)}</div><div class="settings-card"><h2 class="section-title">Playback defaults</h2>${field('Practice mode','Manual, Automatic or Continuous.',select('mode',[['manual','Manual'],['automatic','Automatic'],['continuous','Continuous']]))}${field('Phrase length','Natural speaking units, not rigid cuts.',select('grouping',[['original','Original transcript cues'],['short','Short · 2–4 s'],['balanced','Balanced · 4–8 s'],['long','Long · 8–15 s']]))}${field('Lead-in','A little context before the phrase begins.',select('leadIn',[[0,'None'],[.25,'0.25 sec'],[.5,'0.5 sec'],[1,'1 sec'],[2,'2 sec']]))}${field('Speaking pause type','How long you get to repeat each phrase.',select('pauseType',[['duration','Based on phrase'],['fixed','Fixed time']]))}${field('Fixed pause','Used when pause type is Fixed.',select('fixedPause',[[2,'2 sec'],[3,'3 sec'],[4,'4 sec'],[6,'6 sec'],[8,'8 sec'],[12,'12 sec']]))}${field('Pause multiplier','For duration-based pauses.',select('multiplier',[[1,'1× length'],[1.5,'1.5× length'],[2,'2× length'],[2.5,'2.5× length']]))}</div><div class="settings-card"><h2 class="section-title">Device & data</h2>${field('Keep screen awake','Request screen wake lock while practising, when supported.',`<input data-pref="wakeLock" type="checkbox" ${p.wakeLock?'checked':''}>`)}${field('Export data','Download lessons, transcripts, collections and progress.',`<button class="btn ghost small" data-action="export">${ico('download')} Export JSON</button>`)}${field('Restore data','Replace this library with an Echo Studio export.',`<label class="btn ghost small" for="restore-file">${ico('upload')} Import backup</label><input id="restore-file" type="file" accept="application/json,.json" hidden>`)}${field('Session history','Review your completed practice sessions.',`<button class="btn ghost small" data-action="history">${ico('clock')} ${store.data.sessions.length} sessions</button>`)}${field('Synchronisation','Your library and progress are saved to your signed-in account when connected.',`<span class="micro">${store.mode==='cloud'?'Saved to your account':esc(store.mode)}${['local','offline'].includes(store.mode)?` <button class="text-link sync-settings-retry" data-action="retry-sync" ${ui.syncRetrying?'disabled':''}>${ui.syncRetrying?'Retrying…':'Retry sync'}</button>`:''}</span>`)}</div><div class="tip">Keyboard: Space play/pause · ←/→ phrases · R replay · Q queue · T text · Esc close. YouTube playback always requires a connection.</div>`;}
 function statusControls(phrase){const s=current()?.statuses[phrase.id]||{};return `<div class="phrase-flags"><button class="pill ${s.practised?'active':''}" data-action="mark" data-id="${phrase.id}" data-status="practised" aria-pressed="${!!s.practised}">${ico('check')} ${s.practised?'Practised':'Mark practised'}</button><button class="pill ${s.difficult?'active':''}" data-action="mark" data-id="${phrase.id}" data-status="difficult" aria-pressed="${!!s.difficult}">${ico('flag')} Difficult</button></div>`;}
 function phraseWords(p){if(!current()?.phrases.length)return '<span class="transcript-unavailable">Transcript unavailable<span>Listen to the audio. Add or replace a transcript in Lesson options to enable shadowing.</span></span>';if(!pref().showText)return '<span class="muted">Phrase hidden. Listen carefully.</span>';if(!p)return 'No phrase selected';const words=p.text.split(/(\s+)/);let index=-1;const activeWords=new Set(activeWordIndices(p,player.time));return '<span class="phrase-inner">'+words.map(w=>{if(!w.trim())return ' ';index++;return `<button class="word ${activeWords.has(index)?'current-word':''}" data-action="word" data-word="${attr(w)}" title="View British IPA">${esc(w)}</button>`;}).join('')+'</span>';}
-function phraseContext(p){
- if(!pref().showText||!p)return {before:'',after:''};
- const {before,after}=phraseNeighbours(player.eligible(),p.id);
- const line=(q,distance)=>`<span class="context-line context-${distance}" aria-hidden="true">${esc(q.text)}</span>`;
- return {before:before.map((q,i)=>line(q,before.length-i)).join(''),after:after.map((q,i)=>line(q,i+1)).join('')};
-}
 function playerView(){
  const l=current(),p=player.current();if(!l)return empty('Choose a lesson','Open a lesson from your library.');
  const audio=usesUploadedAudio(l),transport=transportState(player),failed=player.state==='error',disabled=!player.ready||failed;
- const mirrorAvailable=audio&&!!p&&p.end>p.start,context=phraseContext(p);
+ const mirrorAvailable=audio&&!!p&&p.end>p.start;
  const feedback=playbackFeedback(player.state,audio);
  const last=player.eligible().at(-1)?.id===p?.id,index=l.phrases.findIndex(q=>q.id===p?.id)+1,duration=p?p.end-p.start:player.duration||l.duration||0;
  return `<main class="player-page immersive-player ${audio?'audio-only':''} ${mirrorAvailable?'mirror-enabled':''}" data-ambient-source="${l.ambientPalette?.source||'preparing'}" aria-label="Practice player"><img class="player-artwork" src="${attr(l.thumbnail?.url||l.frame?.url||`https://i.ytimg.com/vi/${l.videoId}/hqdefault.jpg`)}" alt="">
- <header class="player-top"><button class="icon-btn player-back" data-action="back" aria-label="Back" title="Back">${ico('chevron')}</button><div class="player-title">${esc(l.title)}</div><div class="session-actions"><button class="icon-btn" data-action="player-settings" aria-label="Player settings" title="Player settings">${ico('settings')}</button></div></header>
+ <header class="player-top"><button class="icon-btn player-back" data-action="back" aria-label="Back" title="Back">${ico('chevrondown')}</button><div class="player-title"><img class="player-source-art" src="${attr(l.thumbnail?.url||l.frame?.url||`https://i.ytimg.com/vi/${l.videoId}/mqdefault.jpg`)}" alt="" width="40" height="40"><span class="player-title-copy"><strong title="${attr(l.title)}">${esc(l.title)}</strong>${l.channel||l.speaker?`<small>${esc(l.channel||l.speaker)}</small>`:''}</span></div><div class="session-actions"><button class="icon-btn" data-action="player-settings" aria-label="Player settings" title="Player settings">${ico('settings')}</button></div></header>
  <div class="player-content">
  <div class="playback-notice ${feedback.visible?'':'sr-only'}" role="status" aria-live="polite">${feedback.visible?`<button data-action="playback-details">${esc(feedback.label)}</button>`:esc(feedback.label)}</div>
  <div class="practice-body">
- <section class="phrase-panel" aria-label="Current phrase and surrounding transcript"><div class="phrase-context context-before">${context.before}</div><div class="phrase-text ${p?.text.length>110?'long':''} ${p?.text.length>230?'very-long':''}" id="active-phrase" data-phrase="${attr(p?.id||'')}">${phraseWords(p)}</div><div class="phrase-context context-after">${context.after}</div>
-</section>
+ <section class="phrase-panel" aria-label="Transcript">${pref().showText&&p?'<div id="lyrics-viewport" class="lyrics-viewport" tabindex="0" aria-label="Scroll transcript and choose a phrase"></div><button class="lyrics-follow" data-action="lyrics-follow" hidden>Current phrase</button>':`<div class="phrase-text" id="active-phrase">${phraseWords(p)}</div>`}</section>
  ${audio?'':'<section class="media-info" aria-label="YouTube recording"><div class="video-slot" id="video-slot"></div></section>'}
  </div>
  <div id="swipe-zone" class="swipe-zone" aria-label="Swipe left for next phrase or right for previous phrase"><span class="sr-only" id="mirror-status" role="status">${mirror.active?esc(mirror.error||mirror.message):''}</span></div>
@@ -184,6 +178,7 @@ function modal(){const m=ui.modal;let content='',title='',large=false;
 }
 function ensureAmbient(lesson){const id=lesson.id;prepareAmbient(lesson,palette=>{const saved=store.data.lessons.find(l=>l.id===id);if(saved)store.mutate(()=>{saved.ambientPalette=palette;});});}
 function render(){
+ lyrics.capture();
  if(store.mode==='cloud')ui.syncDismissed=false;
  const oldQueue=root.querySelector('#queue-list');const queuePosition=oldQueue?.scrollTop;const oldPhrase=oldQueue?.querySelector('.selected')?.dataset.rowId;
  const hadModal=!!root.querySelector('.modal');
@@ -193,7 +188,7 @@ function render(){
  const focusId=focused?.id;const libraryField=focused?.dataset?.lfield;const oldLibraryDialog=root.querySelector('.library-overlay .modal')?.getAttribute('aria-label');
  const selection=textSelection(focused);
  const formValues=ui.modal&&!['add','replace'].includes(ui.modal.type)?[...root.querySelectorAll('.modal input[id]:not([type=file]):not([data-pref]):not(#audio-offset):not(#player-loop),.modal textarea[id],.modal select[id]:not([data-pref]):not(#speed):not(#lesson-media-source)')].map(e=>({id:e.id,value:e.value,checked:e.checked})):[];
- applyTheme();document.body.classList.toggle('view-home',ui.view==='home');document.body.classList.toggle('view-collections',ui.view==='collections');document.body.classList.toggle('view-settings',ui.view==='settings');document.body.classList.toggle('view-search',ui.view==='search');document.body.classList.toggle('has-compact-audio',!!current()&&ui.started&&!ui.compactDismissed&&ui.view!=='player');document.body.classList.toggle('view-player',ui.view==='player');document.documentElement.classList.toggle('view-player',ui.view==='player');document.body.classList.toggle('queue-open',ui.queue&&ui.view==='player');applyAmbient(current());if(ui.view==='player'&&current())ensureAmbient(current());document.body.classList.toggle('view-library',ui.view==='library'&&!ui.collectionId);document.body.classList.toggle('imported-player',ui.view==='player'&&!!current()?.importedAt);root.innerHTML=shell(ui.view==='home'?home():ui.view==='library'?library():ui.view==='collections'?collections():ui.view==='settings'?settings():ui.view==='search'?searchUI.view():playerView());dock.className=`youtube-dock ${current()&&!usesUploadedAudio(current())&&(ui.view==='player'||ui.started&&!ui.compactDismissed)?(ui.view==='player'?'':'dock-compact'):'dock-hidden'}`;if(ui.queue){requestAnimationFrame(()=>{const list=document.querySelector('#queue-list'),row=list?.querySelector('.selected');if(list&&queuePosition!=null&&oldPhrase===player.current()?.id)list.scrollTop=queuePosition;else if(row)list.scrollTop=row.offsetTop-list.offsetTop-list.clientHeight/2+row.clientHeight/2;});}updateTimeline();layoutDock();schedulePlayerLayout();
+ applyTheme();document.body.classList.toggle('view-home',ui.view==='home');document.body.classList.toggle('view-collections',ui.view==='collections');document.body.classList.toggle('view-settings',ui.view==='settings');document.body.classList.toggle('view-search',ui.view==='search');document.body.classList.toggle('has-compact-audio',!!current()&&ui.started&&!ui.compactDismissed&&ui.view!=='player');document.body.classList.toggle('view-player',ui.view==='player');document.documentElement.classList.toggle('view-player',ui.view==='player');document.body.classList.toggle('queue-open',ui.queue&&ui.view==='player');applyAmbient(current());if(ui.view==='player'&&current())ensureAmbient(current());document.body.classList.toggle('view-library',ui.view==='library'&&!ui.collectionId);document.body.classList.toggle('imported-player',ui.view==='player'&&!!current()?.importedAt);root.innerHTML=shell(ui.view==='home'?home():ui.view==='library'?library():ui.view==='collections'?collections():ui.view==='settings'?settings():ui.view==='search'?searchUI.view():playerView());dock.className=`youtube-dock ${current()&&!usesUploadedAudio(current())&&(ui.view==='player'||ui.started&&!ui.compactDismissed)?(ui.view==='player'?'':'dock-compact'):'dock-hidden'}`;if(ui.queue){requestAnimationFrame(()=>{const list=document.querySelector('#queue-list'),row=list?.querySelector('.selected');if(list&&queuePosition!=null&&oldPhrase===player.current()?.id)list.scrollTop=queuePosition;else if(row)list.scrollTop=row.offsetTop-list.offsetTop-list.clientHeight/2+row.clientHeight/2;});}const lyricsSlot=document.getElementById('lyrics-viewport');if(lyricsSlot)lyrics.mount(lyricsSlot,{lessonId:current().id,phrases:player.eligible(),currentId:player.current()?.id,activeHTML:phraseWords(player.current())});updateTimeline();layoutDock();schedulePlayerLayout();
  watchMore();navigation.commit(captureRoute());
  for(const el of root.querySelectorAll('[data-scroll-key]'))if(horizontalPositions.has(el.dataset.scrollKey))el.scrollLeft=horizontalPositions.get(el.dataset.scrollKey);
  for(const group of root.querySelectorAll('.form-group')){const label=group.querySelector('label'),control=group.querySelector('input[id],select[id],textarea[id]');if(label&&control)label.htmlFor=control.id;}
@@ -211,7 +206,7 @@ let moreObserver=null;
 function watchMore(){moreObserver?.disconnect();const sentinel=root.querySelector('[data-load-more]');if(!sentinel||!('IntersectionObserver' in window))return;moreObserver=new IntersectionObserver(entries=>{if(!entries.some(e=>e.isIntersecting)||!sentinel.isConnected)return;moreObserver.disconnect();if(sentinel.dataset.loadMore==='library')libraryUI.action('more');else searchUI.action('more');},{rootMargin:'180px'});moreObserver.observe(sentinel);}
 let playerLayoutFrame=0;
 function schedulePlayerLayout(){if(playerLayoutFrame)return;playerLayoutFrame=requestAnimationFrame(()=>{playerLayoutFrame=0;fitPhrase();layoutDock();});}
-function fitPhrase(){const el=document.getElementById('active-phrase');if(!el)return;el.style.removeProperty('font-size');const panel=el.parentElement,height=panel.clientHeight;panel.classList.toggle('context-few',height>=260);panel.classList.toggle('context-many',height>=460);const available=el.clientHeight;if(available<1)return;const inner=el.querySelector('.phrase-inner')||el;const maximum=parseFloat(getComputedStyle(el).fontSize),minimum=Math.min(maximum,Math.max(18,parseFloat(getComputedStyle(document.documentElement).fontSize)*1.125));const size=fitTextSize({maximum,minimum,available:available-2,measure:value=>{el.style.fontSize=value+'px';return inner.scrollHeight;}});el.style.fontSize=size+'px';}
+function fitPhrase(){lyrics.layout();}
 function layoutDock(){
  const slot=usesUploadedAudio(current())?null:ui.view==='player'?document.querySelector('#video-slot'):document.querySelector('.compact-video-slot');
  if(slot&&current()){
@@ -300,7 +295,7 @@ store.onChange=()=>{
 function getVal(id){return document.getElementById(id)?.value;}
 function closeModal(){recorder.stop();ui.modal=null;ui.word=null;render();}
 function collectImportInputs(){const a=ui.import;if(ui.modal?.type==='add'){a.url=getVal('import-url')??a.url;a.title=getVal('import-title')??a.title;a.speaker=getVal('import-speaker')??a.speaker;}a.text=getVal('transcript-text')??a.text;a.grouping=getVal('import-grouping')??a.grouping;a.offset=Number(getVal('import-offset')??a.offset);}
-function action(name,data,e){const l=current();if(mirror.active&&['toggle','next','prev','replay','reset-phrase','select-phrase','queue-replay','queue','player-settings','settings-shortcut','show-ipa','word','seek-tools','mode','record-practice','remove-audio'].includes(name))mirror.exit();switch(name){
+function action(name,data,e){const l=current();if(mirror.active&&['toggle','next','prev','replay','reset-phrase','select-phrase','lyric-select','queue-replay','queue','player-settings','settings-shortcut','show-ipa','word','seek-tools','mode','record-practice','remove-audio'].includes(name))mirror.exit();switch(name){
  case 'home-category':ui.homeCategory=data.category||'';render();break;
  case 'home-categories':libraryUI.action('taxonomy');break;
  case 'home-course-options':libraryUI.action('menu',{kind:'c',id:data.id});break;
@@ -324,8 +319,10 @@ function action(name,data,e){const l=current();if(mirror.active&&['toggle','next
  case 'queue-menu':ui.queueMenu=ui.queueMenu===data.id?null:data.id;render();break;
  case 'queue-replay':player.seekPhrase(data.id,false);player.play();ui.queueMenu=null;render();break;
  case 'select-phrase':const resume=ui.queueWasPlaying||player.playing;player.seekPhrase(data.id,resume);ui.queueMenu=null;if(mobileLayout())ui.queue=false;render();break;
+ case 'lyrics-follow':lyrics.follow();break;
+ case 'lyric-select':lyrics.following=true;player.seekPhrase(data.id,false);player.play();render();break;
  case 'retry-player':player.retry();break;
- case 'reset-phrase':player.replay();break;
+ case 'reset-phrase':lyrics.following=true;player.replay();break;
  case 'remove-audio':removeLessonAudio(data.id);break;
  case 'preview-audio-source':{const lesson=store.data.lessons.find(l=>l.id===data.id);if(current()?.id!==lesson.id){openLesson(lesson.id);ui.modal={type:'lesson-actions',id:lesson.id};}player.replay();break;}
  case 'options-tab':ui.optionsTab=data.tab;render();break;
@@ -344,8 +341,8 @@ function action(name,data,e){const l=current();if(mirror.active&&['toggle','next
  case 'mirror-exit':mirror.exit();break;
  case 'record-practice':if(recorder.recorder?.state==='recording')recorder.stop();else{player.pause();recorder.start();}break;
    case 'toggle':player.toggle();break;
- case 'prev':player.previous();break;
- case 'next':player.next();break;
+ case 'prev':lyrics.following=true;player.previous();break;
+ case 'next':lyrics.following=true;player.next();break;
  case 'replay':player.replay();break;
  case 'recording-toggle':ui.recordingOpen=!ui.recordingOpen;render();break;
  case 'show-ipa':if(!l?.phrases.length)return toast('IPA needs a transcript.');ui.modal={type:'phrase-ipa'};render();break;
