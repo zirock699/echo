@@ -21,8 +21,25 @@ import {transportState,swipeDirection,dismissCompactSwipe} from './practice.mjs'
 import {applyAmbient,prepareAmbient} from './ambient.mjs';
 import {playbackFeedback} from './player-layout.mjs';
 const store=new Store(),player=new PlayerEngine(),lyrics=new LyricsScroller();
-const freshUI=()=>({started:false,compactDismissed:false,preparing:false,uploading:false,uploadError:'',queueWasPlaying:false,view:'home',search:'',libraryFilter:'all',sort:'recent',collectionId:null,modal:null,optionsTab:'playback',recordingOpen:false,queue:false,queuePage:null,queueMenu:null,homeCategory:'',syncDismissed:null,syncRetrying:false,word:null,import:{url:'',title:'',speaker:'',text:'',fileName:'',offset:0,grouping:'original',preview:null,errors:[],warnings:[],format:''},pendingSummary:null});
+const freshUI=()=>({started:false,compactDismissed:false,preparing:false,uploading:false,uploadError:'',queueWasPlaying:false,view:'home',search:'',libraryFilter:'all',sort:'recent',collectionId:null,modal:null,optionsTab:'playback',practicePromptDraft:null,recordingOpen:false,queue:false,queuePage:null,queueMenu:null,homeCategory:'',syncDismissed:null,syncRetrying:false,word:null,import:{url:'',title:'',speaker:'',text:'',fileName:'',offset:0,grouping:'original',preview:null,errors:[],warnings:[],format:''},pendingSummary:null});
 const ui=freshUI();
+const speakingPrompts={
+ 'home-prompt':{
+  title:'Speaking prompt',
+  situation:'Your colleague expects the figures on Tuesday. They’ll be ready on Thursday. Ask your colleague to check them on Friday.',
+  task:'Say the update in your own words.',
+  note:'One short reply is enough. You can plan silently.',
+  exit:'Back to Home'
+ },
+ 'transfer-prompt':{
+  title:'Take a phrase into a new conversation',
+  situation:'A teammate expects tomorrow’s meeting to be online. It will be in the studio instead. Ask them to bring the draft.',
+  task:'Give the update in your own words.',
+  note:'If it helps, borrow an expression or a way of emphasising a detail from your selected phrase.',
+  exit:'Back to Practice options'
+ }
+};
+const activePrompt=()=>speakingPrompts[ui.modal?.type]??null;
 const root=document.querySelector('#app'),dock=document.querySelector('#youtube-dock'),toaster=document.querySelector('#toast');
 const focus=new RenderFocus(root);
 root.addEventListener('click',e=>focus.rememberInvoker(e.target.closest('[data-action],[data-lx],[data-cx],[data-sx]')),{capture:true});
@@ -33,17 +50,44 @@ const recorder=new PracticeRecorder(()=>render());
 const mirror=new EchoMirror({notify:()=>render(),tick:()=>mirrorTick(),pause:()=>player.pause(),restore:time=>{if(current()?.id===mirror.lesson?.id)player.seekRecording(time,false);}});
 const mobileLayout=()=>matchMedia('(max-width:760px), (max-width:1024px) and (max-height:520px) and (pointer:coarse)').matches;
 const navigation=new ScreenHistory({restore:restoreRoute});
-function captureRoute(){const modal=ui.modal?Object.fromEntries(Object.entries(ui.modal).filter(([key])=>!['preview','remap'].includes(key))):null;return {owner:store.owner,view:ui.view,search:{query:searchUI.query,kind:searchUI.kind,limit:searchUI.limit},lessonId:current()?.id||null,modal,optionsTab:ui.optionsTab,queue:ui.queue,library:{state:{...libraryUI.state},kind:libraryUI.kind,page:libraryUI.page,searchOpen:libraryUI.searchOpen,dialog:libraryUI.dialog},collections:{id:collectionsUI.id,query:collectionsUI.query,lessonQuery:collectionsUI.lessonQuery,page:collectionsUI.page,lessonPage:collectionsUI.lessonPage,dialog:collectionsUI.dialog,draftId:collectionsUI.draft.id},mirrorPanel:mirror.panelOpen,overlay:!!(ui.modal||libraryUI.dialog||collectionsUI.dialog||mirror.panelOpen||ui.view==='player'&&ui.queue&&mobileLayout())};}
+function captureRoute(){
+ const modal=ui.modal?Object.fromEntries(Object.entries(ui.modal).filter(([key])=>!['preview','remap'].includes(key))):null;
+ return {
+  owner:store.owner,view:ui.view,lessonId:current()?.id||null,modal,optionsTab:ui.optionsTab,queue:ui.queue,
+  search:{query:searchUI.query,kind:searchUI.kind,limit:searchUI.limit},
+  library:{state:{...libraryUI.state},kind:libraryUI.kind,page:libraryUI.page,searchOpen:libraryUI.searchOpen,dialog:libraryUI.dialog},
+  collections:{id:collectionsUI.id,query:collectionsUI.query,lessonQuery:collectionsUI.lessonQuery,page:collectionsUI.page,lessonPage:collectionsUI.lessonPage,dialog:collectionsUI.dialog,draftId:collectionsUI.draft.id},
+  mirrorPanel:mirror.panelOpen,
+  overlay:!!(ui.modal||libraryUI.dialog||collectionsUI.dialog||mirror.panelOpen||ui.view==='player'&&ui.queue&&mobileLayout()),
+  nestedOverlay:modal?.type==='transfer-prompt',transient:!!activePrompt()
+ };
+}
 function restoreRoute(route){
+ if(!store.owner){
+   ui.modal=route.modal?.type==='home-prompt'?{type:'home-prompt'}:null;
+   render();return;
+ }
+ const returningToPractice=ui.modal?.type==='transfer-prompt'&&route.modal?.type==='player-settings';
  if(ui.view==='player'&&route.view!=='player')saveProgress();
- const resumeQueue=ui.queue&&mobileLayout()&&!route.queue&&ui.queueWasPlaying;mirror.exit();recorder.stop();ui.view=['home','library','collections','settings','player','search'].includes(route.view)?route.view:'home';ui.collectionId=null;ui.modal=route.modal||null;ui.optionsTab=route.optionsTab||'playback';ui.queue=!!route.queue&&ui.view==='player';
+ const resumeQueue=!activePrompt()&&!route.transient&&ui.queue&&mobileLayout()&&!route.queue&&ui.queueWasPlaying;
+ mirror.exit();recorder.stop();
+ ui.view=['home','library','collections','settings','player','search'].includes(route.view)?route.view:'home';
+ ui.collectionId=null;ui.modal=route.modal||null;ui.optionsTab=route.optionsTab||'playback';ui.queue=!!route.queue&&ui.view==='player';
  if(route.search)Object.assign(searchUI,route.search);
  if(route.library){Object.assign(libraryUI.state,route.library.state);Object.assign(libraryUI,{kind:route.library.kind,page:route.library.page||1,searchOpen:!!route.library.searchOpen,dialog:route.library.dialog||''});}
  const collection=route.collections;if(collection){Object.assign(collectionsUI,{id:collection.id,query:collection.query||'',lessonQuery:collection.lessonQuery||'',page:collection.page||1,lessonPage:collection.lessonPage||1,dialog:collection.dialog||''});if(collectionsUI.dialog==='edit'){const c=store.data.collections.find(c=>c.id===collection.draftId);if(c)collectionsUI.draft={id:c.id,name:c.name};else collectionsUI.dialog='';}if(collectionsUI.dialog==='pick'&&!collectionsUI.collection)collectionsUI.dialog='';}
- if(ui.view==='player'&&route.lessonId&&current()?.id!==route.lessonId){if(store.data.lessons.some(l=>l.id===route.lessonId))openLesson(route.lessonId);else ui.view='library';}
+ if(ui.view==='player'&&route.lessonId&&current()?.id!==route.lessonId){if(store.data.lessons.some(l=>l.id===route.lessonId))openLesson(route.lessonId);else{ui.view='library';ui.modal=null;ui.queue=false;}}
+ if(ui.modal?.type==='transfer-prompt'&&!player.current())ui.modal=null;
  if(ui.modal?.type==='regroup'&&current()){const preview=groupPhrases(current().segments,ui.modal.grouping);ui.modal={...ui.modal,preview,remap:remapStatuses(current().phrases,preview,current().statuses)};}
  if(route.mirrorPanel&&current()&&player.current()){ensureMirror();mirror.togglePanel();}
- render();if(resumeQueue)player.play();requestAnimationFrame(()=>window.scrollTo(0,route.scroll||0));
+ render();
+ if(returningToPractice){
+   const trigger=root.querySelector('#practice-transfer-prompt');
+   trigger?.focus({preventScroll:true});
+   trigger?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
+ }
+ if(resumeQueue)player.play();
+ requestAnimationFrame(()=>window.scrollTo(0,route.scroll||0));
 }
 addEventListener('popstate',event=>navigation.pop(event.state));
 addEventListener('click',()=>navigation.rememberScroll(scrollY),{capture:true});
@@ -92,11 +136,14 @@ function shelfMoreCard(shelf){
  const lessons=shelfArtworkLessons(store.data,shelf),tiles=Array.from({length:4},(_,i)=>lessons.length?homeArtwork(lessons[i%lessons.length],'l'):homeArtwork({},'l')).join('');
  return `<article class="shelf-card shelf-more-card"><button class="shelf-open" data-action="home-see-all" data-shelf="${attr(shelf.id)}" aria-label="See all ${attr(shelf.title)}"><span class="shelf-mosaic" aria-hidden="true">${tiles}</span><strong>See all</strong><small>${shelf.total} ${shelf.destination.view==='collections'?(shelf.total===1?'collection':'collections'):shelf.destination.kind==='courses'?(shelf.total===1?'course':'courses'):(shelf.total===1?'item':'items')}</small></button></article>`;
 }
+function homePromptButton(){
+ return '<button id="home-speaking-prompt" class="btn ghost home-prompt" type="button" aria-haspopup="dialog" data-action="home-speaking-prompt">Try a speaking prompt</button>';
+}
 function home(){
  const data=store.data,lessons=data.lessons,resume=lessons.find(l=>l.id===data.lastLessonId)||[...lessons].sort((a,b)=>(b.importedAt||b.createdAt)-(a.importedAt||a.createdAt))[0];
  const shelves=homeShelves(data);libraryUI.lessonIndex=new Map(lessons.map(l=>[l.id,l]));
  return `<main class="home-screen"><header class="home-appbar"><h1>Home</h1><div class="library-app-actions"><button class="icon-btn" data-action="library-search" aria-label="Search">${ico('search')}</button><button class="icon-btn" data-action="settings-shortcut" aria-label="Settings">${ico('settings')}</button></div></header>
- ${resume?`<button class="home-resume" data-action="open-lesson" data-id="${attr(resume.id)}" aria-label="Resume lesson">${homeArtwork(resume,'l')}<span class="home-resume-copy"><small>Continue practising</small><strong>${esc(resume.title)}</strong><small>${esc(progressLabel(resume))}</small></span><span class="home-resume-play" aria-hidden="true">${ico('play')}</span></button>`:`<section class="first-lesson"><h2>Add your first lesson</h2><p class="muted">Import a ZIP of lessons, or add a recording and transcript to start practising.</p><button class="btn primary" data-action="open-add">${ico('plus')} Add lessons</button></section>`}
+ <div class="home-start">${resume?`<button class="home-resume" data-action="open-lesson" data-id="${attr(resume.id)}" aria-label="Resume lesson">${homeArtwork(resume,'l')}<span class="home-resume-copy"><small>Continue practising</small><strong>${esc(resume.title)}</strong><small>${esc(progressLabel(resume))}</small></span><span class="home-resume-play" aria-hidden="true">${ico('play')}</span></button>`:`<section class="first-lesson"><h2>Add your first lesson</h2><p class="muted">Import a ZIP of lessons, or add a recording and transcript to start practising.</p><button class="btn primary" data-action="open-add">${ico('plus')} Add lessons</button></section>`}${homePromptButton()}</div>
  ${shelves.map(shelf=>`<section class="home-shelf ${shelf.items.length<=2?'shelf-compact':''}" aria-labelledby="shelf-${attr(shelf.id)}"><header><h2 id="shelf-${attr(shelf.id)}">${esc(shelf.title)}</h2><div class="shelf-heading-actions">${shelf.hasMore?`<button id="home-more-${attr(shelf.id)}" class="text-link" data-action="home-see-all" data-shelf="${attr(shelf.id)}" aria-label="See all ${attr(shelf.title)}">See all</button>`:''}<div class="shelf-scroll-controls" data-shelf-scroll-controls hidden><button class="icon-btn" data-action="shelf-scroll" data-shelf="${attr(shelf.id)}" data-direction="left" aria-label="Scroll ${attr(shelf.title)} left" aria-controls="home-track-${attr(shelf.id)}">${ico('chevron')}</button><button class="icon-btn" data-action="shelf-scroll" data-shelf="${attr(shelf.id)}" data-direction="right" aria-label="Scroll ${attr(shelf.title)} right" aria-controls="home-track-${attr(shelf.id)}">${ico('chevron','shelf-next')}</button></div></div></header><div id="home-track-${attr(shelf.id)}" class="shelf-track" data-scroll-key="shelf-${attr(shelf.id)}" role="region" aria-label="${attr(shelf.title)}" tabindex="0">${shelf.items.map(entry=>homeShelfCard(entry,shelf.id)).join('')}${shelf.hasMore?shelfMoreCard(shelf):''}</div></section>`).join('')}
  <button id="home-manage-categories" class="text-link home-manage-categories" data-action="home-categories">Manage categories</button></main>`;
 }
@@ -226,7 +273,7 @@ function optionsSheet(){
  const nav=`<nav class="option-tabs" role="tablist" aria-label="Player options">${[['playback','Playback'],['practice','Practice'],['lesson','Lesson']].map(([v,label])=>`<button role="tab" aria-selected="${tab===v}" tabindex="${tab===v?0:-1}" data-action="options-tab" data-tab="${v}" class="${tab===v?'active':''}">${label}</button>`).join('')}</nav>`;
  let body='';
  if(tab==='practice'&&!p)body='<p>Transcript unavailable. Listening and recording are available; add a valid transcript to use phrase practice.</p>';else if(tab==='lesson')body=lessonForm(l);
- else if(tab==='practice')body=`<div class="option-group">${p?statusControls(p):''}</div>${practiceForm(l)}<div class="option-links"><button class="menu-link" data-action="edit-phrase" data-id="${attr(p?.id)}">Edit current phrase ${ico('edit')}</button><button class="menu-link" data-action="session-finish">Finish session ${ico('check')}</button></div>`;
+ else if(tab==='practice')body=`<div class="option-group">${statusControls(p)}</div>${practiceForm(l)}<div class="option-links"><button class="menu-link" data-action="edit-phrase" data-id="${attr(p.id)}">Edit current phrase ${ico('edit')}</button><button id="practice-transfer-prompt" class="menu-link" type="button" aria-haspopup="dialog" data-action="practice-transfer-prompt" ${recorder.requesting||recorder.recorder?.state==='recording'?'disabled':''}>Try a new conversation ${ico('chevron','shelf-next')}</button><button class="menu-link" data-action="session-finish">Finish session ${ico('check')}</button></div>`;
  else body=`<div class="option-group"><div class="menu-setting"><label for="player-mode">Mode</label><select id="player-mode" data-pref="mode">${selectOption([['manual','Manual'],['automatic','Automatic'],['continuous','Continuous']],player.mode)}</select></div>
  <div class="menu-setting"><label for="speed">Speed</label><div class="inline-controls"><select id="speed" aria-label="Playback speed">${selectOption(rates.map(x=>[x,x+'×']),player.requestedSpeed??player.speed)}</select><button class="text-link" data-action="reset-speed">Reset</button></div></div>
  <div class="menu-setting"><label for="player-lead">Lead-in</label><select id="player-lead" data-pref="leadIn">${selectOption([[0,'None'],[.25,'0.25 s'],[.5,'0.5 s'],[1,'1 s'],[2,'2 s']],player.leadIn)}</select></div></div>
@@ -235,7 +282,23 @@ function optionsSheet(){
  <button class="menu-link" data-action="seek-tools">Seek within the recording ${ico('chevrondown')}</button>${store.mode==='conflict'?'<button class="menu-link" data-action="sync-details">Review sync conflict</button>':''}`;
  return `${nav}<div class="options-content" role="tabpanel">${body}<div class="recording-tools"><p>Record your practice <small>Private to this browser session</small></p><button class="btn" data-action="record-practice" ${recorder.requesting?'disabled':''}>${recorder.requesting?'Requesting microphone…':recorder.recorder?.state==='recording'?'Stop recording':'Record yourself'}</button>${recorder.error?`<p role="alert">${esc(recorder.error)}</p>`:''}${recorder.url?`<audio controls src="${recorder.url}" aria-label="Your practice recording"></audio><a href="${recorder.url}" download="echo-practice.webm">Save recording</a>`:''}</div></div>`;
 }
+function speakingPromptSheet(prompt){
+ const transfer=ui.modal.type==='transfer-prompt';
+ return `<div class="modal-shade prompt-shade${transfer?' transfer-prompt-shade':''}" data-action="shade">
+   <section class="modal speaking-prompt" role="dialog" aria-modal="true" aria-labelledby="speaking-prompt-title" data-focus-dialog="app:${ui.modal.type}">
+     <div class="modal-head">
+       <h2 id="speaking-prompt-title" tabindex="-1" data-focus-initial>${esc(prompt.title)}</h2>
+       <button class="icon-btn" type="button" data-action="modal-close" aria-label="Close prompt">${ico('close')}</button>
+     </div>
+     <p class="prompt-situation">${esc(prompt.situation)}</p>
+     <p class="prompt-task">${esc(prompt.task)}</p>
+     <p class="prompt-note">${esc(prompt.note)}</p>
+     <div class="modal-footer"><button class="btn" type="button" data-action="modal-close">${esc(prompt.exit)}</button></div>
+   </section>
+ </div>`;
+}
 function modal(){const m=ui.modal;let content='',title='',large=false;
+ const prompt=activePrompt();if(prompt)return speakingPromptSheet(prompt);
  if(m.type==='add'||m.type==='replace'){
    title=m.type==='add'?'Create a lesson':'Replace transcript';large=true;
    const a=ui.import;
@@ -281,12 +344,35 @@ function modal(){const m=ui.modal;let content='',title='',large=false;
  return `<div class="modal-shade" data-action="shade"><section class="modal ${large?'large':''}" role="dialog" aria-modal="true" data-focus-dialog="app:${attr(m.type)}" ${m.type==='player-settings'?'data-focus-return="#player-options-toggle"':''} aria-label="${attr(title)}"><div class="modal-head"><h2>${title}</h2><button class="icon-btn" data-action="modal-close" aria-label="Close dialog">${ico('close')}</button></div>${content}</section></div>`;
 }
 function ensureAmbient(lesson){const data=store.data;prepareAmbient(lesson,palette=>{if(store.data===data&&data.lessons.includes(lesson))store.mutate(()=>{lesson.ambientPalette=palette;});});}
+let shownPrompt=null;
+function isolateSpeakingPrompt(prompt){
+ dock.inert=!!prompt;
+ toaster.hidden=!!prompt;
+ if(prompt)for(const child of root.children)child.inert=!child.classList.contains('prompt-shade');
+}
+function captureModalFields(){
+ const fields=root.querySelectorAll('.modal input[id]:not([type=file]):not([data-pref]):not(#audio-offset):not(#player-loop),.modal textarea[id],.modal select[id]:not([data-pref]):not(#speed):not(#lesson-media-source)');
+ return Array.from(fields,field=>({id:field.id,value:field.value,checked:field.checked}));
+}
 function render({recenterQueue=false}={}){
  focus.cancelDeferred();
+ const prompt=activePrompt();
+ const draft=ui.practicePromptDraft;
+ const practiceFields=draft&&draft.lessonId===current()?.id&&ui.modal?.type==='player-settings'&&ui.optionsTab==='practice'?draft.fields:null;
+ if(prompt!==shownPrompt){
+  shownPrompt=prompt;
+  ui.practicePromptDraft=ui.modal?.type==='transfer-prompt'?{lessonId:current()?.id,fields:captureModalFields()}:null;
+  if(prompt){
+   ui.queueWasPlaying=false;
+   player.pauseForPrompt({save:ui.modal.type==='home-prompt'});
+  }else player.releasePrompt();
+ }
  if(!store.owner){
   applyTheme();dock.className='youtube-dock dock-hidden';
   const checking=store.mode==='checking',focused=focus.capture();
-  root.innerHTML=`<main class="home-screen"><header class="home-appbar"><h1>Echo Studio</h1></header><section class="empty"><h2>${checking?'Connecting':'Library unavailable'}</h2><p role="status">${checking?'Checking your account…':'Connect and sign in to load your private library.'}</p>${checking?'':'<button class="btn primary" data-action="retry-sync">Retry</button>'}</section></main>`;
+  root.innerHTML=`<main class="home-screen"><header class="home-appbar"><h1>Echo Studio</h1></header><section class="empty"><h2>${checking?'Connecting':'Library unavailable'}</h2><p role="status">${checking?'Checking your account…':'Connect and sign in to load your private library.'}</p><div class="home-start">${checking?'':'<button class="btn primary" data-action="retry-sync">Retry</button>'}${homePromptButton()}</div></section></main>${prompt?speakingPromptSheet(prompt):''}`;
+  isolateSpeakingPrompt(prompt);
+  navigation.commit(captureRoute());
   focus.restore(focused);return;
  }
  if((ui.view!=='player'||ui.modal?.type!=='player-settings')&&(recorder.requesting||recorder.recorder?.state==='recording'))recorder.stop();
@@ -297,8 +383,9 @@ function render({recenterQueue=false}={}){
  if(oldQueue&&!recenterQueue&&ui.queuePage?.lessonId!==current()?.id&&queuePosition!==Number(oldQueue.dataset.renderedScroll))holdQueuePage(oldQueue);
  const focused=focus.capture();
  const horizontalPositions=new Map([...root.querySelectorAll('[data-scroll-key]')].map(el=>[el.dataset.scrollKey,el.scrollLeft]));
- const formValues=ui.modal&&!['add','replace'].includes(ui.modal.type)?[...root.querySelectorAll('.modal input[id]:not([type=file]):not([data-pref]):not(#audio-offset):not(#player-loop),.modal textarea[id],.modal select[id]:not([data-pref]):not(#speed):not(#lesson-media-source)')].map(e=>({id:e.id,value:e.value,checked:e.checked})):[];
+ const formValues=practiceFields??(ui.modal&&!['add','replace'].includes(ui.modal.type)?captureModalFields():[]);
  applyTheme();document.body.classList.toggle('view-home',ui.view==='home');document.body.classList.toggle('view-collections',ui.view==='collections');document.body.classList.toggle('view-settings',ui.view==='settings');document.body.classList.toggle('view-search',ui.view==='search');document.body.classList.toggle('has-compact-audio',!!current()&&ui.started&&!ui.compactDismissed&&ui.view!=='player');document.body.classList.toggle('view-player',ui.view==='player');document.documentElement.classList.toggle('view-player',ui.view==='player');document.body.classList.toggle('queue-open',ui.queue&&ui.view==='player');applyAmbient(current());if(ui.view==='player'&&current())ensureAmbient(current());document.body.classList.toggle('view-library',ui.view==='library'&&!ui.collectionId);document.body.classList.toggle('imported-player',ui.view==='player'&&!!current()?.importedAt);root.innerHTML=shell(ui.view==='home'?home():ui.view==='library'?library():ui.view==='collections'?collections():ui.view==='settings'?settings():ui.view==='search'?searchUI.view():playerView());dock.className=`youtube-dock ${current()&&!usesUploadedAudio(current())&&(ui.view==='player'||ui.started&&!ui.compactDismissed)?(ui.view==='player'?'':'dock-compact'):'dock-hidden'}`;const lyricsSlot=document.getElementById('lyrics-viewport');if(lyricsSlot)lyrics.mount(lyricsSlot,{lessonId:current().id,phrases:player.eligible(),currentId:player.current()?.id,activeHTML:phraseWords(player.current())});updateTimeline();layoutDock();schedulePlayerLayout();
+ isolateSpeakingPrompt(prompt);
  const queueList=ui.queue&&root.querySelector('#queue-list');
  if(queueList){
   if(oldQueue)queueList.closest('.queue-panel').dataset.retained='';
@@ -492,15 +579,17 @@ store.onChange=()=>{
  if(renderImmediately){
    const hadOwner=visibleOwner!==null;
    visibleOwner=store.owner;
-   if(hadOwner||navigation.ready)resetPrivateView();
+   // A prompt opened before identity verification carries no private state.
+   const keepPublicPrompt=!hadOwner&&ui.modal?.type==='home-prompt';
+   if(!keepPublicPrompt&&(hadOwner||navigation.ready))resetPrivateView();
    mirror.setOwner(visibleOwner);
-   if(navigation.ready)navigation.start(captureRoute(),false);
+   if(navigation.ready&&!keepPublicPrompt)navigation.start(captureRoute(),false);
  }
  if(!store.owner){render();return;}
  if(current()){
    const saved=store.data.lessons.find(l=>l.id===current().id);
    if(saved&&saved!==current()){renderImmediately=true;player.load(saved,pref());player.initialise();}
-   else if(!saved){renderImmediately=true;clearActivePlayer();mirror.exit();recorder.stop();if(ui.view==='player')ui.view='library';}
+   else if(!saved){renderImmediately=true;clearActivePlayer();mirror.exit();recorder.stop();if(ui.view==='player'){ui.view='library';if(ui.modal?.type==='transfer-prompt')ui.modal=null;}}
  }
  prepareStartup();cleanupAudio();
  if(ui.view){if(renderImmediately)render();else focus.afterEditing(render);}
@@ -522,9 +611,24 @@ async function restoreBackup(file){
  }
 }
 function getVal(id){return document.getElementById(id)?.value;}
-function closeModal(){recorder.stop();ui.modal=null;ui.word=null;render();}
+function openSpeakingPrompt(type){
+ if(!navigation.ready)navigation.start(captureRoute(),false);
+ ui.modal={type};render();
+}
+function closeModal(){
+ if(activePrompt()){navigation.back();return;}
+ recorder.stop();ui.modal=null;ui.word=null;render();
+}
 function collectImportInputs(){const a=ui.import;if(ui.modal?.type==='add'){a.url=getVal('import-url')??a.url;a.title=getVal('import-title')??a.title;a.speaker=getVal('import-speaker')??a.speaker;}a.text=getVal('transcript-text')??a.text;a.grouping=getVal('import-grouping')??a.grouping;a.offset=Number(getVal('import-offset')??a.offset);}
-function action(name,data,e){if(!store.owner&&name!=='retry-sync')return;const l=current();if(mirror.active&&['toggle','next','prev','replay','reset-phrase','select-phrase','lyric-select','queue-replay','queue','player-settings','settings-shortcut','show-ipa','word','seek-tools','mode','record-practice','remove-audio'].includes(name))mirror.exit();switch(name){
+function action(name,data,e){
+ const dismissDialog=name==='modal-close'||name==='shade';
+ if(activePrompt()&&!dismissDialog)return;
+ if(!store.owner&&!dismissDialog&&name!=='retry-sync'&&name!=='home-speaking-prompt')return;
+ const l=current();if(mirror.active&&['toggle','next','prev','replay','reset-phrase','select-phrase','lyric-select','queue-replay','queue','player-settings','settings-shortcut','show-ipa','word','seek-tools','mode','record-practice','remove-audio'].includes(name))mirror.exit();switch(name){
+ case 'home-speaking-prompt':if(ui.view==='home'&&!ui.modal&&!libraryUI.dialog&&!collectionsUI.dialog&&!mirror.panelOpen)openSpeakingPrompt('home-prompt');break;
+ case 'practice-transfer-prompt':
+   if(ui.view==='player'&&ui.modal?.type==='player-settings'&&ui.optionsTab==='practice'&&player.current()&&!recorder.requesting&&recorder.recorder?.state!=='recording')openSpeakingPrompt('transfer-prompt');
+   break;
  case 'home-category':ui.homeCategory=data.category||'';render();break;
  case 'home-categories':libraryUI.action('taxonomy');break;
  case 'home-course-options':libraryUI.action('menu',{kind:'c',id:data.id});break;
@@ -661,7 +765,7 @@ document.addEventListener('keydown',e=>{
 });
 let originalScroll=0;document.addEventListener('visibilitychange',()=>{if(document.hidden){if(mirror.active)mirror.exit();recorder.stop();saveProgress('background');if(wakeLock)wakeLock.release().catch(()=>{});}else{updateWake();store.connect();}});addEventListener('online',()=>store.connect());addEventListener('pageshow',event=>{if(event.persisted)store.connect();});addEventListener('focus',()=>{if(!document.hidden)store.connect();});addEventListener('scroll',layoutDock,{passive:true,capture:true});addEventListener('resize',schedulePlayerLayout);window.visualViewport?.addEventListener('resize',schedulePlayerLayout);new ResizeObserver(schedulePlayerLayout).observe(root);document.fonts?.ready.then(schedulePlayerLayout);addEventListener('beforeunload',()=>{recorder.reset();mirror.dispose();saveProgress('background');});matchMedia('(prefers-color-scheme: light)').addEventListener('change',()=>{if(pref().theme==='system')applyTheme();});
 if('serviceWorker'in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('/sw.js').catch(()=>{});
-render();store.init().then(()=>{navigation.start(captureRoute());prepareStartup();if(store.owner&&!current()&&pref().startupLesson!=='none')warmYouTube();});
+render();store.init().then(()=>{if(!navigation.ready)navigation.start(captureRoute());prepareStartup();if(store.owner&&!current()&&pref().startupLesson!=='none')warmYouTube();});
 
 let compactTouch=null;
 root.addEventListener('touchstart',e=>{const bar=e.target.closest('.compact-player');compactTouch=bar&&e.touches.length===1?{x:e.touches[0].clientX,y:e.touches[0].clientY}:null;},{passive:true});

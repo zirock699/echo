@@ -78,7 +78,7 @@ export class RenderFocus{
   });
   root.addEventListener('compositionend',({target})=>{if(this.composing===target)this.composing=null;});
  }
- dialogs(){return [...this.root.querySelectorAll(modalSelector)].filter(visible);}
+ dialogs(){return [...this.root.querySelectorAll(modalSelector)].filter(dialog=>visible(dialog)&&!dialog.closest('[inert]'));}
  topDialog(){return this.dialogs().at(-1);}
  nativeSelectOpen(){return detectsOpenSelect&&this.root.querySelector(openSelect)!==null;}
  afterEditing(render){
@@ -139,7 +139,7 @@ export class RenderFocus{
     if(target&&focusable(target)){if(!target.matches(controls))target.tabIndex=-1;target.focus({preventScroll:true});}
    }
   }
-  if(dialog)focusDialog(dialog,tabStops(dialog)[0]);
+  if(dialog)focusDialog(dialog,dialog.querySelector('[data-focus-initial]')||tabStops(dialog)[0]);
  }
  trapTab(event,dialog){
   const items=tabStops(dialog),active=this.root.ownerDocument.activeElement;

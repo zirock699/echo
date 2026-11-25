@@ -37,6 +37,7 @@ python3 tests/browser_player_focus.py
 python3 tests/browser_queue_window.py
 python3 tests/browser_playback_scale.py
 python3 tests/browser_offline.py
+python3 tests/browser_speaking_prompts.py
 ```
 
 Each script starts its own loopback service with synthetic data. The playback scale check reports timings for the 36-lesson and 16,950-cue audit workload and requires FFmpeg with `libmp3lame`. The offline check exercises a built Worker and uses real Chromium service workers. The older `browser_smoke.py` and `browser_extended.py` are historical inline fixtures.
@@ -50,6 +51,10 @@ Use **Library → Import** for ZIP packages containing audio, captions, artwork 
 ## Echo Mirror
 
 Timed audio lessons support listen-then-record practice with an expandable waveform comparison and explicitly saved device-local attempts. See [Echo Mirror behaviour, privacy and limits](docs/ECHO_MIRROR.md).
+
+## Speaking practice
+
+Use **Try a speaking prompt** on Home for a short fictional situation. With a phrase selected, use **Player settings → Practice → Try a new conversation** to try the selected expression or emphasis in a different situation. See the [speaking practice handoff and private pilot guide](docs/product/speaking-prompt-handoff.md).
 
 ## Main files
 

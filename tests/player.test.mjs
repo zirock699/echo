@@ -37,6 +37,201 @@ test('Next marks the current phrase Practised and immediately starts the next; r
 test('automatic advancement does not mark phrases Practised',async t=>{
  const {e}=await fixture(t);const marked=[];e.onPractised=id=>marked.push(id);await e.initialise();e.setMode('automatic');e.play();e.yt.time=29;e.tick();t.mock.timers.tick(4000);assert.equal(e.phrase.id,'b');assert.deepEqual(marked,[]);
 });
+test('a cancelled pending play cannot resume after the prompt even with a matching late adapter state',async t=>{
+ const {e}=await fixture(t);
+ await e.initialise();
+ const source=e.yt, emit=state=>source.config.events.onStateChange({data:state});
+ const saves=[], marks=[];
+ e.onSave=reason=>saves.push(reason);
+ e.onPractised=id=>marks.push(id);
+ source.playVideo=()=>{source.state=3;emit(3);};
+ let pauses=0;
+ source.pauseVideo=()=>{pauses++;};
+ e.play();
+ t.mock.timers.tick(8000);
+ assert.equal(e.state,'stalled');
+ saves.length=0;
+ const position=e.time;
+
+ e.pauseForPrompt();
+ assert.equal(e.timer,null);
+ e.play();e.next();e.seekRecording(31,true);
+ source.state=1;emit(1);
+ source.time=31.4;e.tick();
+ emit(0);
+ assert.equal(pauses,2);
+ assert.equal(e.time,position);
+ assert.equal(e.current().id,'a');
+
+ e.releasePrompt();
+ await Promise.resolve();
+ assert.notEqual(e.timer,null);
+ source.state=1;emit(1);
+ assert.equal(pauses,3);
+ source.state=2;emit(2);
+ source.state=1;emit(1);
+ assert.equal(pauses,4);
+ source.state=2;emit(2);emit(0);
+ source.config.events.onAutoplayBlocked();
+ e.tick();
+ assert.equal(e.state,'paused');
+ assert.equal(e.time,position);
+ assert.equal(e.session,null);
+ assert.deepEqual(e.lesson.progress.coverage,[]);
+ assert.deepEqual(saves,[]);
+ assert.deepEqual(marks,[]);
+
+ e.play();
+ assert.equal(e.state,'buffering');
+ t.mock.timers.tick(8000);
+ assert.equal(e.state,'stalled');
+ source.config.events.onAutoplayBlocked();
+ assert.equal(e.state,'blocked');
+ e.play();
+ source.state=1;emit(1);
+ assert.equal(e.playing,true);
+ assert.ok(e.session);
+});
+test('speaking prompts interrupt automatic waits while preserving the clock, queue and practice metrics',async t=>{
+ const {e}=await fixture(t);
+ await e.initialise();
+ e.setMode('automatic');
+ e.lesson.statuses.a={difficult:true};
+ e.lesson.statuses.b={difficult:true};
+ e.setSelection('difficult');
+ e.play();
+ e.yt.time=27.2;e.tick();
+ e.yt.time=27.4;e.tick();
+ e.recordMark('a','difficult');
+ e.yt.time=29;e.tick();
+ assert.equal(e.state,'speaking-pause');
+ const session=structuredClone(e.session), progress=structuredClone(e.lesson.progress);
+ const saves=[];
+ e.onSave=reason=>saves.push(reason);
+
+ e.pauseForPrompt({save:true});
+ e.pauseForPrompt({save:true});
+ e.releasePrompt();
+ e.yt.time=31.4;
+ t.mock.timers.tick(12000);
+ assert.equal(e.state,'paused');
+ assert.equal(e.time,29);
+ assert.equal(e.current().id,'a');
+ assert.equal(e.phraseDone,true);
+ assert.equal(e.mode,'automatic');
+ assert.equal(e.requestedSpeed,1.5);
+ assert.deepEqual(e.eligible().map(phrase=>phrase.id),['a','b']);
+ assert.deepEqual(e.session,session);
+ assert.deepEqual(e.lesson.progress,progress);
+ assert.deepEqual(saves,[undefined]);
+
+ e.play();
+ assert.equal(e.playing,true);
+ assert.equal(e.yt.time,27);
+});
+test('a prompt on an empty Home also holds a lesson prepared after first verification',async t=>{
+ const {e}=await fixture(t);
+ const empty=new e.constructor(), saves=[];
+ t.after(()=>empty.destroy());
+ empty.onSave=reason=>saves.push(reason);
+ empty.pauseForPrompt({save:true});
+ empty.load(lesson(),{mode:'manual'});
+ await empty.initialise();
+ empty.yt.state=1;empty.yt.config.events.onStateChange({data:1});
+ assert.equal(empty.yt.state,2);
+ assert.equal(empty.playing,false);
+ assert.equal(empty.session,null);
+ assert.deepEqual(saves,[]);
+ empty.releasePrompt();
+ empty.play();
+ assert.equal(empty.playing,true);
+});
+test('an explicit paused native seek settles normally after dismissal and the native timer returns to idle',async t=>{
+ const {e}=await fixture(t);
+ const priorAudio=globalThis.Audio;
+ class NativeAudio extends EventTarget {
+  readyState=1;
+  duration=40;
+  position=0;
+  paused=true;
+  get currentTime(){return this.position;}
+  set currentTime(value){this.target=value;this.seeking=true;}
+  load(){if(this.src)queueMicrotask(()=>this.dispatchEvent(new Event('loadedmetadata')));}
+  removeAttribute(){this.src='';}
+  pause(){this.paused=true;this.dispatchEvent(new Event('pause'));}
+  play(){this.paused=false;this.dispatchEvent(new Event('playing'));return Promise.resolve();}
+  settle(){this.position=this.target;this.seeking=false;this.dispatchEvent(new Event('seeked'));}
+ }
+ globalThis.Audio=NativeAudio;
+ t.after(()=>{globalThis.Audio=priorAudio;});
+ const empty=new e.constructor();
+ t.after(()=>empty.destroy());
+ empty.pauseForPrompt();
+ empty.releasePrompt();
+ const id='00000000-0000-4000-8000-000000000001';
+ empty.load({...lesson(),audio:{id,url:'/api/audio/'+id}},{mode:'manual'});
+ await empty.initialise();
+ const audio=empty.yt.audio;
+ audio.settle();
+ assert.equal(empty.duration,40);
+
+ empty.play();
+ empty.seekPhrase('b',true);
+ assert.equal(empty.pendingSeek.target,31);
+ assert.notEqual(empty.timer,null);
+ empty.pauseForPrompt();
+ assert.equal(empty.timer,null);
+ t.mock.timers.tick(12000);
+ assert.equal(empty.pendingSeek.target,31);
+ assert.equal(empty.timer,null);
+
+ empty.releasePrompt();
+ await Promise.resolve();
+ assert.notEqual(empty.timer,null);
+ audio.settle();
+ t.mock.timers.tick(20);
+ assert.equal(empty.pendingSeek,null);
+ assert.equal(empty.timer,null);
+ assert.equal(audio.paused,true);
+
+ empty.seekPhrase('a',false);
+ assert.equal(empty.pendingSeek.target,27);
+ audio.settle();
+ t.mock.timers.tick(20);
+ assert.equal(empty.pendingSeek,null);
+ assert.equal(empty.timer,null);
+ assert.equal(empty.time,27);
+ assert.equal(empty.current().id,'a');
+ assert.equal(audio.paused,true);
+});
+test('a new lesson discards the old prompt fence and old adapter events',async t=>{
+ const {e}=await fixture(t);
+ await e.initialise();
+ const original=e.yt;
+ e.play();
+ assert.equal(e.playing,true);
+ e.pauseForPrompt();
+ e.releasePrompt();
+
+ const replacement={...lesson(),id:'replacement',videoId:'dQw4w9WgXcQ'};
+ e.load(replacement,{mode:'continuous'});
+ await e.initialise();
+ e.yt.time=31.2;
+ e.tick();
+ assert.equal(e.time,31.2);
+ assert.equal(e.current().id,'b');
+ assert.equal(e.duration,80);
+ original.state=1;original.config.events.onStateChange({data:1});
+ original.state=0;original.config.events.onStateChange({data:0});
+ assert.equal(e.playing,false);
+ assert.equal(e.session,null);
+
+ e.pauseForPrompt();
+ e.releasePrompt();
+ e.yt.playVideo();
+ assert.equal(e.playing,true);
+ assert.equal(e.session.lessonId,replacement.id);
+});
 test('speed preference survives asynchronous rate changes and cue resets',async t=>{
  const {e}=await fixture(t);await e.initialise();let requested=null;e.yt.setPlaybackRate=value=>{requested=value;};
  e.speed=1;assert.equal(e.setSpeed(.5),true);assert.equal(requested,.5);assert.equal(e.speed,1);assert.equal(e.requestedSpeed,.5);
