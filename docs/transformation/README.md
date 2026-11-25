@@ -6,6 +6,8 @@ Echo should make two jobs equally easy to find. Continue a chosen reference, or 
 
 The completed remediation and speaking-prompt handoff are the discovery baseline. On 25 November 2026 the owner approved the transformation work. The roadmap records implementation status and the remaining trial and release gates.
 
+After the Home correction and prompt removal, the returning specialist team investigated what else users could turn into useful, reusable practice. [Current material-led research](../product/material-led-practice-research.md)
+
 ## Read and try
 
 | Decision material | Purpose |
