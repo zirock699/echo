@@ -7,7 +7,8 @@ export function searchLibrary(data,query,kind='all'){
 }
 export function rememberSearch(history,term){const value=String(term||'').trim().slice(0,160);return value?[value,...(Array.isArray(history)?history:[]).filter(x=>typeof x==='string'&&normal(x)!==normal(value))].slice(0,20):history||[];}
 export class SearchUI{
- constructor(store,render,open){Object.assign(this,{store,render,open,query:'',kind:'all',limit:24});}
+ constructor(store,render,open){Object.assign(this,{store,render,open});this.resetOwner();}
+ resetOwner(){Object.assign(this,{query:'',kind:'all',limit:24,composing:false});}
  remember(){if(this.query.trim())this.store.mutate(d=>{d.preferences.searchHistory=rememberSearch(d.preferences.searchHistory,this.query);});}
  action(action,a={}){
   if(action==='clear'){this.query='';this.limit=24;}
@@ -20,7 +21,7 @@ export class SearchUI{
   if(action==='open'){this.remember();this.open[a.kind]?.(a.id);return;}
   this.render();
  }
- bind(root){let composing=false;root.addEventListener('compositionstart',e=>{if(e.target.id==='search-query')composing=true;},true);root.addEventListener('compositionend',e=>{if(e.target.id==='search-query'){composing=false;this.query=e.target.value;this.limit=24;this.updateResults(root);}},true);root.addEventListener('click',e=>{const el=e.target.closest('[data-sx]');if(!el)return;e.preventDefault();e.stopImmediatePropagation();this.action(el.dataset.sx,el.dataset);},true);root.addEventListener('input',e=>{if(e.target.id!=='search-query')return;this.query=e.target.value;this.limit=24;if(!composing&&!e.isComposing)this.updateResults(root);},true);root.addEventListener('keydown',e=>{if(e.target.id==='search-query'&&e.key==='Enter'&&!e.isComposing&&!composing){e.preventDefault();this.action('submit');}},true);}
+ bind(root){root.addEventListener('compositionstart',e=>{if(e.target.id==='search-query')this.composing=true;},true);root.addEventListener('compositionend',e=>{if(e.target.id==='search-query'){this.composing=false;this.query=e.target.value;this.limit=24;this.updateResults(root);}},true);root.addEventListener('click',e=>{const el=e.target.closest('[data-sx]');if(!el)return;e.preventDefault();e.stopImmediatePropagation();this.action(el.dataset.sx,el.dataset);},true);root.addEventListener('input',e=>{if(e.target.id!=='search-query')return;this.query=e.target.value;this.limit=24;if(!this.composing&&!e.isComposing)this.updateResults(root);},true);root.addEventListener('keydown',e=>{if(e.target.id==='search-query'&&e.key==='Enter'&&!e.isComposing&&!this.composing){e.preventDefault();this.action('submit');}},true);}
  row({type,item}){const image=item.thumbnail?.url||item.frame?.url||item.cover?.url||(type==='lesson'&&item.videoId?`https://i.ytimg.com/vi/${encodeURIComponent(item.videoId)}/mqdefault.jpg`:null);return `<article class="search-result"><button data-sx="open" data-kind="${type}" data-id="${esc(item.id)}"><span class="search-art" aria-hidden="true">${image?`<img src="${esc(image)}" alt="" width="48" height="48" loading="lazy">`:uiIcon(type==='collection'?'folder':type==='course'?'library':'play')}</span><span><strong>${esc(item.title||item.name)}</strong><small>${type==='lesson'?esc(item.channel||item.speaker||'Lesson'):type==='course'?`${item.lessonIds?.length||0} lessons`:'Collection'}</small></span>${uiIcon(type==='lesson'?'play':'chevron')}</button></article>`;}
  updateResults(root){
   const target=root.querySelector?.('#search-results');

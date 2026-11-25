@@ -5,6 +5,11 @@ export function lyricDistance(index,current){return Math.min(3,Math.abs(index-cu
 /** Keep the reading surface and its scroll position alive across transport renders. */
 export class LyricsScroller{
  constructor(){this.element=null;this.key='';this.currentId=null;this.following=true;this.position=0;this.frame=0;this.initial=true;}
+ resetOwner(){
+  if(this.frame)cancelAnimationFrame(this.frame);
+  this.element?.replaceChildren();
+  Object.assign(this,{element:null,key:'',currentId:null,following:true,position:0,frame:0,initial:true});
+ }
  capture(){if(this.element?.isConnected)this.position=this.element.scrollTop;}
  mount(slot,{lessonId,phrases,currentId,activeHTML}){
   const key=lessonId+'|'+JSON.stringify(phrases.map(p=>[p.id,p.text]));
@@ -12,10 +17,11 @@ export class LyricsScroller{
   if(!this.element||changed){
    this.element=slot;this.key=key;this.currentId=null;this.following=true;this.position=0;this.initial=true;
    slot.innerHTML=`<div class="lyrics-track" role="list" aria-label="Lesson transcript">${phrases.map(p=>`<div class="lyric-row" role="listitem" data-lyric-id="${esc(p.id)}"><button class="lyric-select" data-action="lyric-select" data-id="${esc(p.id)}" aria-label="Play phrase: ${esc(p.text)}">${esc(p.text)}</button><div class="phrase-text lyric-current" hidden></div></div>`).join('')}</div>`;
-   const browse=()=>{this.following=false;this.updateFollow();};
+   const browse=()=>{if(slot===this.element){this.following=false;this.updateFollow();}};
    slot.addEventListener('wheel',browse,{passive:true});slot.addEventListener('touchstart',browse,{passive:true});
+   slot.addEventListener('focusin',e=>{if(e.target.matches('.lyric-select:focus-visible'))browse();});
    slot.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' '].includes(e.key))browse();});
-   slot.addEventListener('scroll',()=>{this.position=slot.scrollTop;this.updateFollow();},{passive:true});
+   slot.addEventListener('scroll',()=>{if(slot===this.element){this.position=slot.scrollTop;this.updateFollow();}},{passive:true});
   }else if(slot!==this.element){slot.replaceWith(this.element);this.element.scrollTo({top:this.position,behavior:'instant'});}
   const rows=[...this.element.querySelectorAll('.lyric-row')],index=phrases.findIndex(p=>p.id===currentId);
   for(const [i,row] of rows.entries()){

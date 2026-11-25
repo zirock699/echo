@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "http-server . -p 4173 -c-1",
+    "start": "node scripts/dev.mjs",
     "test": "node --test tests/*.test.mjs",
     "build": "node scripts/build.mjs",
     "dev": "node scripts/dev.mjs"

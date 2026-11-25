@@ -1,0 +1,32 @@
+# Baseline and verification log
+
+**Audit:** 25 November 2026 · **Repository:** `zirock699/echo` · **Branch:** `work` · **Revision:** [`923d203f4d303b838cfec64ffc52686fe8f8c335`](https://github.com/zirock699/echo/commit/923d203f4d303b838cfec64ffc52686fe8f8c335)
+
+The user selected `work`. `git status --porcelain=v1` returned no entries at intake. `git ls-remote origin refs/heads/main refs/heads/work` returned `bfc7457b015d963354707b9a274a9efdaa60f240` for `main` and the audited SHA for `work`. `git rev-list --left-right --count origin/main...HEAD` returned `0 19`. No stash, branch switch, reset or worktree was needed. `AGENTS.md`, `.codex/` and the engineering and audit docs are the authorised changes made after intake.
+
+The audited app is private, mobile-first and intentionally small in infrastructure. The browser loads native ES modules, CSS and a vendored Color Thief bundle. Core practice uses the YouTube IFrame API or uploaded native audio, with original cues and Continuous as fresh defaults. Manual and Automatic are deliberate shadowing modes. The shipped Worker expects trusted Sites identity, D1 (`DB`) and private R2 (`BUCKET`). Local Node development supplies one synthetic identity and in-memory equivalents. The build embeds the browser assets and emits `dist/server/index.js` with existing Sites metadata. [Current player decisions](../../PLAYER_DECISIONS.md), [timing and storage migrations](../../PLAYBACK_SYNC.md), [most recent UI annotations](../../ANNOTATION_REVIEW.md), [implemented ZIP/courses](../../ZIP_IMPORT.md), [local Echo Mirror](../../ECHO_MIRROR.md).
+
+## Verification at intake
+
+| Check | Command or evidence | Outcome |
+| --- | --- | --- |
+| Toolchain | `node --version`, `npm --version`, `python3 --version`, `chromium --version`, installed Playwright metadata and FFmpeg inventory | Node 24.22.3, npm 11.19.1, Python 3.12.14, Chromium 156.0.8078.79, Playwright 1.62.0. FFmpeg `flite` and `libmp3lame` support existing speech fixtures. |
+| Pristine baseline | `git archive HEAD \| tar -x -C "$base"` with a new directory under `/tmp` | Source snapshot at the exact SHA, without installed dependencies or prior build artifacts. |
+| Node suite | `npm test` from the archive, with exit status preserved | 170 passed, 0 failed, 0 cancelled, 0 skipped. Includes real SQLite migration/CAS tests in addition to adapter and service doubles. |
+| Build | `npm run build`, `node --check dist/server/index.js` and `wc -c dist/server/index.js` in the archive | Build and syntax check passed. Worker measured 594,145 bytes uncompressed. |
+| Lint / CI | `package.json` and tracked workflow/config file inventory | No lint script or `.github` workflow in this baseline. |
+| Browser and other targeted checks | [QA test log](specialists/qa-engineer.md#what-ran) and [independent verification](specialists/independent-reviewer.md#executed-checks) | Three tracked browser scripts stopped at old selectors. Two passed after temporary adaptation. Adapted Sync stopped at a programmatic seek assertion. Targeted current-app ZIP, native seek, conflict and other journeys ran separately. All testing used synthetic data and assigned loopback services. |
+
+## Authority and limits
+
+- Latest decisions supersede the original spec for Continuous/exact-cue defaults, removal of unlimited looping, integrated compact playback, the phrase seek slider and continuously scrolling transcript, conditional shelf links and the floating sync notice. Echo Mirror is implemented as an explicit, device-local feature despite the original specification excluding microphone recording. Treat historical hosted screenshots and test counts as historical.
+- The functional inventory and verification boundaries are in the [QA report](specialists/qa-engineer.md). Known limits include a starter British IPA lexicon, browser/device-specific media, permission and PWA behavior, and bounded snapshot/object storage. There was no access to personal libraries, recordings, live streaming, hosted auth configuration, production D1/R2 or physical Android devices in this run. Local findings and deployment assumptions are labelled separately.
+- No product change, dependency upgrade, deployment, commit, push or production data mutation was authorised for this audit.
+
+## Codex configuration verification
+
+`codex --version` reported `0.172.0-alpha.2`. The installed build's [versioned configuration schema](https://raw.githubusercontent.com/openai/codex/rust-v0.172.0-alpha.2/codex-rs/core/config.schema.json) names `agents.max_concurrent_threads_per_session` and `agents.max_depth` (V1 nesting only). The same version's [role loader](https://github.com/openai/codex/blob/rust-v0.172.0-alpha.2/codex-rs/agent-roles/src/loader.rs) discovers TOMLs below each project configuration layer's `agents` directory and the [role parser](https://github.com/openai/codex/blob/rust-v0.172.0-alpha.2/codex-rs/agent-roles/src/agent_role_config.rs) reads name, description and developer instructions. Python `tomllib` parsed the project config and nine roles, checked each required field and verified unique IDs. `codex app-server --strict-config --print-startup-config` returned successfully. Existing `AGENTS.md` guidance remains beneath the added governance section.
+
+The Cloud collaboration tool in this running session had no named-role argument. The actual native child `/root/delegation_probe` returned the exact Git SHA and verified the package test and build entry points from read-only operations. Attempts to inspect the standalone app server's effective project role state encountered read-only CLI state storage. Named role discovery and execution in a fresh trusted Codex session therefore remain unverified here. The audit used real native children, each given the matching project role instructions, and handled model selection by inheritance. [Start and delegation check](../../engineering/agent-operating-model.md#start-a-session) · [Execution ledger](orchestration.md)
+
+The Engineering Lead opened the generated 320 × 568 dark player and Practice Options screenshots. The player shows the active phrase and transport within the viewport. Options visibly contains the duplicated Practised and Difficult controls reported in UX-02. These screenshots use synthetic audio and content. [Player](specialists/ux-evidence/player-320-dark.png) · [Practice Options](specialists/ux-evidence/practice-options-320-dark.png)

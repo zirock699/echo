@@ -1,0 +1,17 @@
+# Repeatable Echo Studio audit
+
+1. **Establish the baseline.** Record SHA, branch, remote relationship, staged/unstaged/untracked scope, runtime, available browser, hosting constraints and legacy versus current requirements. Leave existing user changes in place. Coordinate isolated synthetic fixtures, local ports and build directories. Current visual decisions come from `DESIGN.md`, `docs/PLAYER_DECISIONS.md` and follow-up docs plus implemented behavior. Older product proposals are evidence of intent, subject to later decisions.
+2. **Delegate independent lanes.** Use the task contract in the [operating model](agent-operating-model.md). Give each specialist a distinct surface and the same baseline. Use separate ports and browser contexts for writes. Record agent IDs, actual model if observable, mode, concurrency, task status and limitations.
+3. **Reconcile.** Identify shared clocks, state or data owners behind apparent duplicates. Compare contradictions with current requirements and reproduction evidence. Ask the assigned specialists to cross-check consequential disagreements. Preserve uncertainty when investigation cannot distinguish competing explanations.
+4. **Verify independently.** Send all Critical and High findings, important security, data and playback issues, foundational changes and removal proposals to the Independent Reviewer with exact references and expected versus observed results. Require decisions per issue. Ask for safe reproduction when available. Record rejected, narrowed and unresolved claims.
+5. **Synthesize and sequence.** Consolidate by underlying cause, keep severity separate from effort, and prioritise practice, progress, library integrity, security and recovery before polish or features. Report unassessed areas and current verification limits. Stop before remediation unless authorised separately.
+
+## Finding contract
+
+For each retained finding include ID, title, owner, domain, severity, confidence and classification (confirmed defect, suspected defect, design weakness, technical debt, external limitation or opportunity). Give evidence with exact revision-relative file/symbol/line references, reproduction conditions and expected versus actual behavior where applicable, root cause, impact, remediation, estimated effort, change risk and dependencies, measurable acceptance criteria, required regression checks, and independent validation disposition. A hypothesis or test gap is not a confirmed product failure. Sensitive security findings should focus on controls and mitigation.
+
+Use Critical for severe immediate compromise or loss with strong evidence, High for credible substantial safety, integrity or core practice harm, Medium for meaningful bounded failure or risk, Low for narrow friction, and Informational for limits or context. Frequency, affected data and recoverability influence severity. Mark cross-domain duplicates in the relevant reports and retain a single register entry.
+
+## Report set
+
+Create a new directory under `docs/audits/` named with the date and revision (or a distinct run suffix). Preserve historical reports. Link an executive summary, baseline and verification log, architecture and flows, role reports, consolidated findings, evidence-based scorecard, root causes, remediation roadmap, independent decisions and preserve/improve/consolidate assessment. Record actual verification versus proposals. Provide a roadmap with scope, lead/support roles, effort, dependencies, risks, acceptance checks and independent review assignments.

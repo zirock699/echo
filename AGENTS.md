@@ -1,5 +1,12 @@
 # Repository instructions for Codex
 
+## Engineering team
+
+- The main Codex session is the Engineering Lead. Use native Codex specialists for independent domain investigations and consequential reviews. Select only the roles the task needs, keep assignments bounded, and reserve a separate reviewer for consequential findings or changes.
+- Audit by default. Give delegates the precise baseline, permissions, owned paths or services, required evidence and acceptance criteria. Agents share the checkout by default. The lead coordinates writes, validation and integration. Specialists do not delegate recursively.
+- Keep first audits limited to analysis, approved agent configuration and reports. Defer product fixes until authorised. Deployment, commits, pushes and destructive steps require explicit approval.
+- See [agent operating model](docs/engineering/agent-operating-model.md), [audit workflow](docs/engineering/audit-workflow.md) and [quality standards](docs/engineering/quality-standards.md) for the task contract, evidence rules and review gates. Use the project role instructions in `.codex/agents/` even when a host exposes only generic native subagents.
+
 ## Before changing the UI
 
 - Read `DESIGN.md` and `spec.md` before modifying UI code. Read the relevant feature sections and `docs/PLAYER_DECISIONS.md`; the specification's confirmed updates override older compositions. Inspect affected source and reference images before choosing an approach.
@@ -19,7 +26,7 @@
 
 ## Required verification for UI changes
 
-1. Start the actual local app from `/workspace/echo` with `node scripts/dev.mjs`; reuse an existing working server where appropriate. The local DB/audio stores are disposable. Do not use `npm start`, which relies on an undeclared static-server dependency and lacks the development API workflow.
+1. Start the actual local app from `/workspace/echo` with `npm start` or `node scripts/dev.mjs`. Reuse an existing working server where appropriate. Both commands use the disposable local database and audio store.
 2. Inspect and test affected screens with Playwright, **mobile before desktop**. Start at 320 × 568 and 390 × 844; then cover tablet, desktop and relevant short landscape sizes. Check safe areas, text scaling, long phrases/titles and absence of horizontal overflow. Player controls must remain visible without page scrolling.
 3. Exercise affected interactions: navigation, import, transport, queue, options, text/IPA, seeking, source switching and compact-player persistence as applicable. Check loading, buffering, errors, empty states and both themes. Use deterministic fixtures without modifying personal or production data.
 4. Capture fresh screenshots after visual changes and open/inspect them. Compare against `DESIGN.md`, current requirements and approved references; a screenshot saved without inspection is insufficient. Keep captures in an ignored or external artifact directory unless requested as deliverables.

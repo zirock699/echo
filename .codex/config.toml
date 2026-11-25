@@ -1,0 +1,4 @@
+# Keep specialist roles project-scoped. The lead owns all delegation.
+[agents]
+max_concurrent_threads_per_session = 5
+max_depth = 1

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {homeShelves} from '../src/home.mjs';
-import {categoryValues} from '../src/courses.mjs';
+import {categoryValues,courseProgress,lessonProgress,progressIndicator,progressLabel} from '../src/courses.mjs';
 import {LibraryUI} from '../src/library-ui.mjs';
 const fixture=()=>({categories:['Unused','Pronunciation'],tags:[],courses:[{id:'c',title:'Course',category:'Speaking',pinned:true,createdAt:1,lessonIds:['l1']}],collections:[{id:'col',name:'Practice',lessonIds:['l1']}],lessons:Array.from({length:40},(_,i)=>({id:'l'+i,title:'Lesson '+i,category:i%2?'Speaking':'Pronunciation',courseId:i===1?'c':null,createdAt:i,phrases:[],favourite:i%3===0,statuses:{},tags:[]}))});
 test('Home previews stay bounded and do not mutate lesson order',()=>{const data=fixture(),before=JSON.stringify(data);const shelves=homeShelves(data);assert.ok(shelves.every(s=>s.items.length<=8));assert.equal(shelves.find(s=>s.id==='recent').items[0].item.id,'l39');assert.equal(shelves.find(s=>s.id==='favourites').items[0].item.id,'l39');assert.equal(JSON.stringify(data),before);assert.ok(!shelves.some(s=>s.title==='Unused'));});
@@ -20,6 +20,54 @@ test('practice shelves use actual progress and open matching complete filters',(
  const library=new LibraryUI({data},()=>{},()=>{});
  for(const shelf of shelves){if(shelf.destination.view)continue;library.browse(shelf.destination);const ids=new Set(library.currentItems().map(x=>x.item.id));assert.ok(shelf.items.every(x=>ids.has(x.item.id)),shelf.id);}
 });
+
+test('listening puts an unmarked timed lesson in Keep practising, while seeking only preserves a resume point',()=>{
+ const data=fixture(),listened=data.lessons[39],seeked=data.lessons[38];
+ Object.assign(listened,{duration:60,phrases:[{id:'current'}],statuses:{obsolete:{practised:true}},progress:{position:45,coverage:[[10,15],[0,12]]}});
+ Object.assign(seeked,{duration:60,progress:{position:45,coverage:[]}});
+ const previous=structuredClone(data);
+ const shelves=homeShelves(data);
+ assert.deepEqual(shelves.find(s=>s.id==='progress').items.map(x=>x.item.id),[listened.id]);
+ assert.ok(shelves.find(s=>s.id==='new').items.some(x=>x.item.id===seeked.id));
+ assert.equal(progressLabel(listened),'25% listened');
+ assert.deepEqual(progressIndicator(seeked),{value:75,label:'Resume at 0:45'});
+ assert.equal(lessonProgress(seeked),0);
+ assert.deepEqual(data,previous);
+});
+
+test('deliberate marks, short listening, and completion retain distinct progress meanings',()=>{
+ const partial={phrases:[{id:'a'},{id:'b'}],statuses:{a:{practised:true}},duration:100,progress:{coverage:[[0,75]]}};
+ const short={duration:100,progress:{coverage:[[0,.1]]}};
+ const fullListening={duration:100,progress:{coverage:[[0,100]]}};
+ assert.equal(progressLabel(partial),'50% practised');
+ assert.equal(progressLabel(short),'<1% listened');
+ assert.equal(lessonProgress(short),1);
+ assert.equal(progressLabel(fullListening),'100% listened');
+ assert.equal(lessonProgress(fullListening),99);
+ assert.deepEqual(progressIndicator({...partial,completed:true}),{value:100,label:'Completed'});
+ assert.deepEqual(progressIndicator({progress:{coverage:[[5,9]]}}),{value:null,label:'0:04 listened'});
+ const complete={id:'complete',completed:true};
+ assert.equal(courseProgress({lessonIds:['complete','incomplete']},[complete,{...fullListening,id:'incomplete'}]),99);
+});
+
+test('progress uses saved transcript times when offset audio duration has an unknown clock',()=>{
+ const recording={audioOffset:-2,mediaSource:'audio'};
+ for(const duration of [10,12]){
+  const listened={...recording,duration,progress:{coverage:[[2,8],[7,12]]}};
+  const seeked={...recording,duration,progress:{position:12}};
+  assert.deepEqual(progressIndicator(listened),{value:null,label:'0:10 listened'});
+  assert.deepEqual(progressIndicator(seeked),{value:null,label:'Resume at 0:12'});
+  assert.ok(lessonProgress(listened)>0&&lessonProgress(listened)<100);
+  assert.equal(lessonProgress(seeked),0);
+ }
+ const positive={...recording,audioOffset:2,duration:10};
+ assert.deepEqual(progressIndicator({...positive,progress:{coverage:[[0,8]]}}),{value:null,label:'0:08 listened'});
+ assert.deepEqual(progressIndicator({...positive,progress:{position:7}}),{value:null,label:'Resume at 0:07'});
+ const aligned={...positive,audioOffset:0};
+ assert.deepEqual(progressIndicator({...aligned,progress:{coverage:[[0,8]]}}),{value:80,label:'80% listened'});
+ assert.deepEqual(progressIndicator({...aligned,progress:{position:7}}),{value:70,label:'Resume at 0:07'});
+});
+
 test('See all artwork resolves real member lessons across courses and collections',async()=>{
  const {shelfArtworkLessons}=await import('../src/home.mjs');const data=fixture();
  const shelf={items:[{kind:'c',item:{lessonIds:['missing','l1','l2']}},{kind:'collection',item:{lessonIds:['l2','l3']}},{kind:'l',item:data.lessons[4]}]};

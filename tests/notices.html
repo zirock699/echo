@@ -9,7 +9,7 @@
 <main>
  <h1>Notice presentation</h1>
  <p>This isolated fixture uses the production notice component. It does not load or change library data.</p>
- <label>Notice<select id="notice-mode"><option value="cloud">None</option><option value="conflict">Newer copy</option><option value="offline">Connection unavailable</option><option value="storage-error">Storage unavailable</option></select></label>
+ <label>Notice<select id="notice-mode"><option value="cloud">None</option><option value="conflict">Newer copy</option><option value="offline">Connection unavailable</option><option value="storage-error">Device storage unavailable</option><option value="both-unavailable">Sync and storage unavailable</option><option value="rejected">Account storage limit</option></select></label>
  <label>Appearance<select id="notice-theme"><option value="dark">Dark</option><option value="light">Light</option></select></label>
  <label><input id="notice-mini" type="checkbox"> With compact player</label>
  <label><input id="notice-player" type="checkbox"> Player placement</label>
@@ -17,10 +17,17 @@
 </main><div id="notice-host"></div>
 <script type="module">
 import {syncIssueKey,syncNoticeHTML} from '/src/sync-notice.mjs';
-const state={mode:'cloud',revision:1,conflict:{revision:2}};
+const state={mode:'cloud',revision:1,conflict:{revision:2},cacheStatus:'saved',pending:false,saveError:null};
 const host=document.querySelector('#notice-host');let dismissed=null;
 function draw(){host.innerHTML=syncNoticeHTML(state,{dismissed});}
-document.querySelector('#notice-mode').onchange=e=>{state.mode=e.target.value;dismissed=null;draw();};
+document.querySelector('#notice-mode').onchange=e=>{
+ const value=e.target.value;
+ state.mode=value==='storage-error'?'cloud':value==='both-unavailable'?'offline':value;
+ state.cacheStatus=['storage-error','both-unavailable'].includes(value)?'unavailable':'saved';
+ state.pending=!['cloud','storage-error'].includes(value);
+ state.saveError=value==='rejected'?{code:'storage-too-large'}:null;
+ dismissed=null;draw();
+};
 document.querySelector('#notice-theme').onchange=e=>document.body.classList.toggle('light',e.target.value==='light');
 document.querySelector('#notice-mini').onchange=e=>document.body.classList.toggle('has-compact-audio',e.target.checked);
 document.querySelector('#notice-player').onchange=e=>document.body.classList.toggle('view-player',e.target.checked);

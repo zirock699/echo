@@ -1,51 +1,216 @@
-"""Collections and same-document mobile navigation checks using native WAV audio.
-Run node scripts/dev.mjs --host 127.0.0.1 --port 4193, then python tests/browser_navigation.py.
-Requires Playwright and Chromium. Replaces only a disposable local development library.
-"""
-from playwright.sync_api import sync_playwright
-import urllib.request,json,io,wave,math,struct
-from urllib.parse import urlparse
-import argparse
-parser=argparse.ArgumentParser();parser.add_argument('--url',default='http://127.0.0.1:4193');base=parser.parse_args().url.rstrip('/')
-if urlparse(base).hostname not in ('localhost','127.0.0.1'):raise SystemExit('Use a disposable localhost development server; this test replaces its library.')
-def api(path,method='GET',body=None,headers={}):return json.load(urllib.request.urlopen(urllib.request.Request(base+path,body,headers,method=method)))
-buf=io.BytesIO()
-with wave.open(buf,'wb') as f:f.setparams((1,2,16000,0,'NONE','not compressed'));f.writeframes(b''.join(struct.pack('<h',int(900*math.sin(i*2*math.pi*220/16000))) for i in range(30*16000)))
-raw=buf.getvalue();asset=api('/api/audio','POST',raw,{'Content-Type':'audio/wav','x-file-size':str(len(raw))});phrases=[{'id':'a','start':0,'end':8,'text':'Listen and repeat this phrase.'},{'id':'b','start':10,'end':18,'text':'Continue your speaking practice.'}]
-lessons=[{'id':f'l{i}','title':f'Practice lesson {i+1:02d}: a clear and confident voice','speaker':'Practice library','videoId':f'test{i:07d}','audio':asset,'mediaSource':'audio','duration':30,'phrases':phrases,'segments':phrases,'source':'','format':'SRT','statuses':{'a':{'practised':True}},'progress':{'position':.3,'phraseId':'a','coverage':[[0,.3]]},'createdAt':i+1,'tags':[],'pauseOverrides':{},'ipaOverrides':{},'revisions':[]}for i in range(72)]
-data={'lessons':lessons,'courses':[],'categories':[],'tags':[],'collections':[{'id':'old','name':'Existing practice','lessonIds':['l1','l2'],'createdAt':1}],'sessions':[],'preferences':{'startupLesson':'none','theme':'dark','mode':'manual','leadIn':0},'lastLessonId':'l0','schemaVersion':2};api('/api/state','PUT',json.dumps({'expectedRevision':api('/api/state')['revision'],'data':data}).encode(),{'Content-Type':'application/json'})
-with sync_playwright() as p:
- b=p.chromium.launch(executable_path='/usr/bin/chromium',args=['--no-sandbox']);ctx=b.new_context(viewport={'width':320,'height':568},is_mobile=True,has_touch=True);page=ctx.new_page();page.set_default_timeout(7000);errors=[];page.on('pageerror',lambda e:errors.append(str(e)));page.add_init_script('window.media=[];const NativeAudio=window.Audio;window.Audio=function(...args){const a=new NativeAudio(...args);window.media.push(a);return a;}');page.goto(base,wait_until='networkidle');page.locator('.home-resume').wait_for();print('loaded',flush=True)
- page.locator('.mobile-nav [data-view=collections]').click();page.get_by_role('button',name='New collection',exact=True).click();page.locator('#collection-name').fill('Focused practice');page.get_by_role('button',name='Save collection',exact=True).click();page.locator('.collections-screen h1').filter(has_text='Focused practice').wait_for();print('created detail',flush=True)
- page.locator('.collection-tools [data-cx=pick]').click();assert page.locator('[data-cx-pick]').count()==24;page.screenshot(path='/tmp/mobile-collections-picker-320.png');page.locator('[data-cx-pick=l0]').check();page.locator('[data-cx-pick=l1]').check();page.locator('[data-cx=picker-page][data-page="2"]').click();page.locator('[data-cx-pick=l24]').check();page.get_by_role('button',name='Save selection',exact=True).click();page.wait_for_timeout(100);assert page.locator('.collection-member').count()==3;print('added paginated selection',flush=True)
- page.get_by_role('button',name='Edit list',exact=True).click();page.locator('[data-cx=move][data-id=l1][data-direction="-1"]').click();assert page.locator('.collection-member [data-cx=lesson]').first.get_attribute('data-id')=='l1';page.locator('[data-cx=remove][data-id=l24]').click();assert page.locator('.collection-member').count()==2;page.get_by_role('button',name='Done',exact=True).click();page.screenshot(path='/tmp/mobile-collections-detail-320.png')
- page.get_by_role('button',name='Collection options',exact=True).click();page.locator('#collection-name').fill('Daily practice');page.get_by_role('button',name='Save collection',exact=True).click();page.wait_for_timeout(100);assert page.locator('.collections-screen h1').inner_text()=='Daily practice'
- # Phone Back from picker closes the sheet, then detail returns to collection list.
- page.locator('.collection-tools [data-cx=pick]').click();page.go_back();page.locator('.collection-overlay').wait_for(state='hidden');assert page.locator('.collections-screen h1').inner_text()=='Daily practice';page.go_back();page.wait_for_timeout(100);assert page.locator('.collections-screen h1').inner_text()=='Collections';print('native Back sheets/detail',flush=True)
- page.locator('.collection-open').filter(has_text='Daily practice').click();page.reload(wait_until='networkidle');assert page.locator('.collections-screen h1').inner_text()=='Daily practice';page.go_back();page.wait_for_timeout(100);assert page.locator('.collections-screen h1').inner_text()=='Collections';page.go_forward();page.wait_for_timeout(100);assert page.locator('.collections-screen h1').inner_text()=='Daily practice'
- page.locator('.collection-member [data-cx=lesson]').first.click();page.wait_for_function("!document.querySelector('#mirror-main-play').disabled");page.locator('.mobile-more').click();page.locator('#player-mode').select_option('continuous');page.get_by_role('button',name='Close dialog',exact=True).click();page.wait_for_timeout(100);page.locator('#mirror-main-play').click();page.wait_for_timeout(150)
- def playing():return page.evaluate('window.media.filter(a=>!a.paused&&!a.ended).length')
- assert playing()==1
- # Native Back closes mobile Queue/Options before leaving the player.
- page.locator('.mobile-queue').click();assert playing()==0;page.go_back();page.wait_for_timeout(150);assert page.locator('.queue-panel').count()==0;assert playing()==1
- page.locator('.mobile-more').click();page.go_back();page.wait_for_timeout(100);assert page.locator('.modal').count()==0;assert page.locator('#mirror-main-play').count()==1
- page.screenshot(path='/tmp/mobile-navigation-player-320.png')
- for w,h in [(320,568),(390,844),(844,390)]:
-  page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(100)
-  assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
-  for selector in ['.player-back','.mobile-queue','#mirror-main-play','#mirror-main-record','.practice-next','.reset-phrase','.mobile-more']:
-   rect=page.locator(selector).bounding_box();assert rect and rect['width']>=44 and rect['height']>=44,(selector,rect,w)
-   assert rect['x']>=0 and rect['y']>=0 and rect['x']+rect['width']<=w+1 and rect['y']+rect['height']<=h+1,(selector,rect,w,h)
-  page.screenshot(path=f'/tmp/mobile-navigation-player-{w}.png')
- page.set_viewport_size({'width':320,'height':568});page.go_back();page.wait_for_timeout(100);assert page.locator('.collections-screen h1').inner_text()=='Daily practice';assert playing()==1;assert page.locator('.compact-audio').count()==1;page.locator('.compact-expand').click();page.get_by_role('button',name='Back',exact=True).click();page.wait_for_timeout(100);assert page.locator('.collections-screen h1').inner_text()=='Daily practice';print('player Back preserves collection context and audio',flush=True)
- page.locator('.mobile-nav [data-view=home]').click();page.locator('[data-action=settings-shortcut]').last.click();page.get_by_role('button',name='Back',exact=True).click();page.wait_for_timeout(100);assert page.locator('.home-screen').count()==1;page.locator('[data-action=settings-shortcut]').last.click();page.go_back();page.wait_for_timeout(100);assert page.locator('.home-screen').count()==1;assert playing()==1
- page.locator('.mobile-nav [data-view=library]').click();page.locator('[data-lx=library-menu]').click();page.get_by_role('button',name='Settings',exact=True).click();page.get_by_role('button',name='Back',exact=True).click();page.wait_for_timeout(100);assert page.locator('.library-screen').count()==1;print('Settings Back returns Home/Library',flush=True)
- # Stop audio for deterministic screenshots and inspect responsive collection screens.
- page.locator('#compact-toggle').click();page.locator('.mobile-nav [data-view=collections]').click();page.screenshot(path='/tmp/mobile-collections-list-320.png');page.locator('.collection-open').filter(has_text='Daily practice').click()
- for w,h in [(320,568),(390,844),(430,932),(844,390),(820,1180),(1440,900)]:
-  page.set_viewport_size({'width':w,'height':h});page.wait_for_timeout(100);assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),w;page.screenshot(path=f'/tmp/mobile-collections-{w}.png')
-  if(w,h)==(844,390):assert page.locator('.sidebar').is_hidden();assert page.locator('.mobile-nav').is_visible()
- page.set_viewport_size({'width':390,'height':844});page.locator('.mobile-nav [data-view=home]').click();page.locator('[data-action=settings-shortcut]').last.click();page.locator('[data-pref=theme]').select_option('light');page.screenshot(path='/tmp/mobile-settings-light.png');page.get_by_role('button',name='Back',exact=True).click();page.wait_for_timeout(100);page.locator('.mobile-nav [data-view=collections]').click();page.locator('.collection-open').filter(has_text='Daily practice').click();page.screenshot(path='/tmp/mobile-collections-light.png')
- # Confirmed deletion removes only the collection. Lesson count/progress must survive.
- page.get_by_role('button',name='Collection options',exact=True).click();page.on('dialog',lambda d:d.accept());page.get_by_role('button',name='Delete collection',exact=True).click();page.wait_for_timeout(1400);server=api('/api/state')['data'];assert len(server['lessons'])==72;assert server['lessons'][0]['statuses']['a']['practised'];assert not any(c['name']=='Daily practice' for c in server['collections']);assert not errors,errors
- print('PASS create/rename, paginated multi-add, ordering/removal, native Back/Forward after reload, player/Settings return paths, ongoing native audio, touch landscape, both themes, deletion/persistence/progress; errors:',errors,flush=True);b.close()
+"""Collections and same-document navigation with generated native WAV audio."""
+
+import io
+import math
+import struct
+import wave
+
+from playwright.sync_api import expect
+
+from browser_fixture import browser_fixture
+
+
+def seed_library(fixture):
+    audio = io.BytesIO()
+    rate = 16_000
+    with wave.open(audio, 'wb') as wav:
+        wav.setparams((1, 2, rate, 0, 'NONE', 'not compressed'))
+        # One second of tone repeated for a long-running player.
+        tone = b''.join(struct.pack('<h', int(900 * math.sin(2 * math.pi * 220 * i / rate))) for i in range(rate))
+        wav.writeframes(tone * 30)
+    asset = fixture.upload_audio(audio.getvalue(), 'audio/wav')
+    phrases = [
+        {'id': 'a', 'start': 0, 'end': 8, 'text': 'Listen and repeat this phrase.'},
+        {'id': 'b', 'start': 10, 'end': 18, 'text': 'Continue your speaking practice.'},
+    ]
+    lessons = [
+        {
+            'id': f'l{i}', 'title': f'Practice lesson {i + 1:02d}: a clear and confident voice',
+            'speaker': 'Practice library', 'videoId': f'test{i:07d}', 'audio': asset,
+            'mediaSource': 'audio', 'duration': 30, 'phrases': phrases, 'segments': phrases,
+            'source': '', 'format': 'SRT', 'statuses': {'a': {'practised': True}},
+            'progress': {'position': .3, 'phraseId': 'a', 'coverage': [[0, .3]]},
+            'createdAt': i + 1, 'tags': [], 'pauseOverrides': {}, 'ipaOverrides': {}, 'revisions': [],
+        }
+        for i in range(72)
+    ]
+    fixture.save_library({
+        'lessons': lessons, 'courses': [], 'categories': [], 'tags': [],
+        'collections': [{'id': 'old', 'name': 'Existing practice', 'lessonIds': ['l1', 'l2'], 'createdAt': 1}],
+        'sessions': [], 'preferences': {'startupLesson': 'none', 'theme': 'dark', 'mode': 'manual', 'leadIn': 0},
+        'lastLessonId': 'l0', 'schemaVersion': 2,
+    })
+
+
+def run():
+    with browser_fixture(__doc__, 'native generated WAV') as fixture:
+        seed_library(fixture)
+        page, errors = fixture.open_page(320, 568)
+        expect(page.get_by_role('button', name='Resume lesson', exact=True)).to_be_visible()
+        nav = page.locator('.mobile-nav')
+        heading = page.locator('.collections-screen h1')
+        collection = page.locator('.collection-open').filter(has_text='Daily practice')
+        members = page.locator('.collection-member')
+        picker = page.locator('.collection-tools [data-cx=pick]')
+
+        def button(name):
+            return page.get_by_role('button', name=name, exact=True)
+
+        nav.locator('[data-view=collections]').click()
+        button('New collection').click()
+        page.locator('#collection-name').fill('Focused practice')
+        button('Save collection').click()
+        expect(heading).to_have_text('Focused practice')
+
+        picker.click()
+        expect(page.locator('[data-cx-pick]')).to_have_count(24)
+        page.locator('[data-cx-pick=l0]').check()
+        page.locator('[data-cx-pick=l1]').check()
+        page.locator('[data-cx=picker-page][data-page="2"]').click()
+        page.locator('[data-cx-pick=l24]').check()
+        button('Save selection').click()
+        expect(members).to_have_count(3)
+
+        button('Edit list').click()
+        page.locator('[data-cx=move][data-id=l1][data-direction="-1"]').click()
+        expect(members.first.locator('[data-cx=lesson]')).to_have_attribute('data-id', 'l1')
+        page.locator('[data-cx=remove][data-id=l24]').click()
+        expect(members).to_have_count(2)
+        button('Done').click()
+        button('Collection options').click()
+        page.locator('#collection-name').fill('Daily practice')
+        button('Save collection').click()
+        expect(heading).to_have_text('Daily practice')
+
+        # Native Back closes the picker before leaving the collection.
+        picker.click()
+        page.go_back()
+        expect(page.locator('.collection-overlay')).to_be_hidden()
+        expect(heading).to_have_text('Daily practice')
+        page.go_back()
+        expect(heading).to_have_text('Collections')
+        collection.click()
+        page.reload(wait_until='domcontentloaded')
+        expect(heading).to_have_text('Daily practice')
+        page.go_back()
+        expect(heading).to_have_text('Collections')
+        page.go_forward()
+        expect(heading).to_have_text('Daily practice')
+
+        player = page.get_by_role('main', name='Practice player')
+        transport = page.locator('#mirror-main-play')
+        options = page.get_by_role('dialog', name='Options')
+        members.first.locator('[data-cx=lesson]').click()
+        expect(transport).to_be_enabled()
+        button('Player settings').click()
+        options.locator('#player-mode').select_option('continuous')
+        options.get_by_role('button', name='Close dialog', exact=True).click()
+        expect(options).to_be_hidden()
+        transport.click()
+
+        def playing(expected):
+            page.wait_for_function('count => window.media.filter(a => !a.paused && !a.ended).length === count', arg=expected)
+
+        playing(1)
+        button('Phrase queue').click()
+        expect(page.locator('.queue-panel')).to_be_visible()
+        playing(0)
+        page.go_back()
+        expect(page.locator('.queue-panel')).to_be_hidden()
+        playing(1)
+        button('Player settings').click()
+        expect(options).to_be_visible()
+        page.go_back()
+        expect(options).to_be_hidden()
+        expect(transport).to_be_visible()
+
+        for width, height in [(320, 568), (390, 844), (844, 390)]:
+            page.set_viewport_size({'width': width, 'height': height})
+            expect(player).to_be_visible()
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (width, height)
+            for control in [
+                button('Back'), button('Phrase queue'), transport, button('Listen then record'),
+                button('Next phrase'), button('Restart current phrase'), button('Player settings'),
+            ]:
+                rect = control.bounding_box()
+                assert rect and rect['width'] >= 44 and rect['height'] >= 44, (control, rect, width)
+                assert rect['x'] >= 0 and rect['y'] >= 0, (control, rect, width)
+                assert rect['x'] + rect['width'] <= width + 1 and rect['y'] + rect['height'] <= height + 1, (control, rect)
+
+        page.set_viewport_size({'width': 320, 'height': 568})
+        page.go_back()
+        expect(heading).to_have_text('Daily practice')
+        playing(1)
+        expect(page.locator('.compact-audio')).to_be_visible()
+        page.get_by_role('button', name='Open player:', exact=False).click()
+        player.get_by_role('button', name='Back', exact=True).click()
+        expect(heading).to_have_text('Daily practice')
+
+        nav.locator('[data-view=home]').click()
+        settings = page.get_by_role('heading', name='Settings', exact=True)
+        home_settings = page.locator('.home-appbar').get_by_role('button', name='Settings', exact=True)
+        home_settings.click()
+        expect(settings).to_be_visible()
+        button('Back').click()
+        expect(page.locator('.home-screen')).to_be_visible()
+        home_settings.click()
+        expect(settings).to_be_visible()
+        page.go_back()
+        expect(page.locator('.home-screen')).to_be_visible()
+        playing(1)
+
+        nav.locator('[data-view=library]').click()
+        page.locator('.library-app-actions').get_by_role('button', name='Settings', exact=True).click()
+        expect(settings).to_be_visible()
+        button('Back').click()
+        expect(page.locator('.library-screen')).to_be_visible()
+
+        page.locator('#compact-toggle').click()
+        playing(0)
+        nav.locator('[data-view=collections]').click()
+        collection.click()
+        expect(heading).to_have_text('Daily practice')
+        for width, height in [(320, 568), (390, 844), (430, 932), (844, 390), (820, 1180), (1440, 900)]:
+            page.set_viewport_size({'width': width, 'height': height})
+            expect(heading).to_have_text('Daily practice')
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (width, height)
+            if (width, height) == (844, 390):
+                expect(page.locator('.sidebar')).to_be_hidden()
+                expect(nav).to_be_visible()
+
+        page.set_viewport_size({'width': 390, 'height': 844})
+        nav.locator('[data-view=home]').click()
+        home_settings.click()
+        page.locator('[data-pref=theme]').select_option('light')
+        expect(page.locator('body.light')).to_be_visible()
+        button('Back').click()
+        expect(page.locator('.home-screen')).to_be_visible()
+        nav.locator('[data-view=collections]').click()
+        collection.click()
+        expect(heading).to_have_text('Daily practice')
+
+        # Deleting the collection must preserve the seeded lessons and progress.
+        before = fixture.wait_for_library(
+            page,
+            lambda data: any(c['name'] == 'Daily practice' for c in data['collections']),
+            'renamed test collection before deletion',
+        )
+        collection_id = next(c['id'] for c in before['collections'] if c['name'] == 'Daily practice')
+        button('Collection options').click()
+        page.once('dialog', lambda dialog: dialog.accept())
+        button('Delete collection').click()
+        saved = fixture.wait_for_library(
+            page,
+            lambda data: all(c['id'] != collection_id for c in data['collections']),
+            'deleted test collection',
+        )
+        assert [c['id'] for c in saved['collections']] == ['old']
+        assert len(saved['lessons']) == 72
+        assert saved['lessons'][0]['statuses']['a']['practised']
+        assert not errors, errors
+        print('PASS Collections, player audio, Queue/Options, Back/Forward, settings and saved deletion. '
+              'Player viewports 320×568, 390×844 and 844×390. Collections also 430×932, 820×1180 and 1440×900.')
+
+
+if __name__ == '__main__':
+    run()

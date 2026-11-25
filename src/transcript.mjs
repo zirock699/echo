@@ -50,11 +50,38 @@ export function normalizeRollingCaptions(segments){
   }
   return {segments:output,rollingCaptions:true,rawSegments:segments,warnings:['Rolling caption display updates were combined; repeated on-screen context was removed. Source timestamps were retained.']};
 }
+const vttHeader = /^WEBVTT(?:[ \t\r\n]|$)/;
 export function parseVTT(text) {
-  let body = String(text).replace(/^\uFEFF/, '').replace(/\r/g, '').trim();
-  if (body.startsWith('WEBVTT')) body = body.replace(/^WEBVTT[^\n]*\n/, '');
-  body = body.replace(/^NOTE[^\n]*(?:\n(?!\n)[^\n]*)*/gm, '');
-  return parseSRT(body);
+  const lines = String(text).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim().split('\n');
+  let first = 0;
+  if (vttHeader.test(lines[0]) && !lines[0].includes('-->')) {
+    first++;
+    // File header fields, such as Language and X-TIMESTAMP-MAP, precede the first blank line.
+    while (/^[a-z][a-z0-9_-]*[ \t]*[:=]/i.test(lines[first] || '') && !lines[first].includes('-->')) first++;
+  }
+
+  const segments = [], problems = [];
+  // A space-only display line is cue payload, which rolling caption exports use.
+  for (const block of lines.slice(first).join('\n').split(/\n{2,}/)) {
+    if (!block.trim()) continue;
+    const blockLines = block.trim().split('\n');
+    const marker = blockLines[0].trimEnd();
+    const timing = blockLines.findIndex(line => line.includes('-->'));
+    if (timing < 0) {
+      if (/^NOTE(?:[ \t]|$)/.test(marker)) continue;
+      if (marker === 'STYLE' || marker === 'REGION') {
+        if (segments.length) problems.push(`A WebVTT ${marker} block must appear before the first cue.`);
+        continue;
+      }
+    }
+    // A cue may have one identifier line. Keep partial results for ZIP import,
+    // but report any orphaned text to the manual import preview.
+    if (timing < 0 || timing > 1) problems.push('A caption block has no timestamp.');
+    if (timing >= 0) {
+      for (const cue of parseSRT(block).segments) segments.push(cue);
+    }
+  }
+  return { segments, problems };
 }
 export function parseJSON(text) {
   const json = typeof text === 'string' ? JSON.parse(text) : text;
@@ -100,7 +127,7 @@ export function parseTranscript(text, filename='') {
   if (hint.endsWith('.json') || /^[\[{]/.test(body) && !body.startsWith('[Music]')) {
     try { return {...parseJSON(body),format:'JSON'}; } catch(e) { if (hint.endsWith('.json')) throw e; }
   }
-  if (hint.endsWith('.vtt') || body.startsWith('WEBVTT')) {const parsed=parseVTT(body);return {...parsed,...normalizeRollingCaptions(parsed.segments),format:'WebVTT'};}
+  if (hint.endsWith('.vtt') || vttHeader.test(body)) {const parsed=parseVTT(body);return {...parsed,...normalizeRollingCaptions(parsed.segments),format:'WebVTT'};}
   if (!body.includes('-->') && /^(?:\[)?(?:\d+:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?\]?(?:\s|$)/m.test(body)) return {...parseTimestampedText(body),format:'Timestamped text'};
   const parsed=parseSRT(body);return {...parsed,...normalizeRollingCaptions(parsed.segments),format:'SRT'};
 }

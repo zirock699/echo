@@ -4,7 +4,7 @@ export class ScreenHistory {
  key(s){return [s.view,s.view==='player'?s.lessonId:'',s.view==='collections'?s.collections?.id:'',s.view==='library'?s.library?.state?.course:'',s.view==='library'&&s.library?.searchOpen?'search':'',s.overlay?'sheet':''].join('|');}
  base(s){return this.key({...s,overlay:false});}
  url(s){const id=s.view==='collections'?s.collections?.id:s.view==='library'?s.library?.state?.course:'';return '#'+s.view+(id?'/'+encodeURIComponent(id):'');}
- start(snapshot){const saved=this.history.state?.echoNavigation;this.session=saved?.session||Date.now()+'-'+Math.random().toString(36).slice(2);this.current=saved||{session:this.session,index:0,snapshot,prevKey:null};this.ready=true;if(saved)this.apply(saved.snapshot);else this.write(false);}
+ start(snapshot,resume=true){const previous=this.history.state?.echoNavigation;const saved=resume&&snapshot.owner!==null&&previous?.snapshot?.owner===snapshot.owner?previous:null;this.session=saved?.session||Date.now()+'-'+Math.random().toString(36).slice(2);this.current=saved||{session:this.session,index:0,snapshot,prevKey:null};this.pending=false;this.ready=true;if(saved)this.apply(saved.snapshot);else this.write(false);}
  write(push){const state={...(this.history.state||{}),echoNavigation:this.current};this.history[push?'pushState':'replaceState'](state,'',this.url(this.current.snapshot));}
  rememberScroll(y){if(!this.ready||this.pending||this.applying)return;this.current.snapshot.scroll=y;this.write(false);}
  commit(snapshot){if(!this.ready||this.applying||this.pending)return;const current=this.current,key=this.key(snapshot),oldKey=this.key(current.snapshot);if(key===oldKey){this.current={...current,snapshot:{...snapshot,scroll:current.snapshot.scroll||0}};this.write(false);return;}

@@ -7,3 +7,36 @@ test('pagination clamps after filtering and empty results',()=>{assert.equal(pag
 test('ZIP preview paginates and confirmation is outside the scrolling dialog body',()=>{const c=controller();c.dialog='import';c.draft={destination:'new',title:'Demo',duplicates:'repair'};c.package={lessons:Array.from({length:40},(_,i)=>({title:'Item '+i,notes:[],phrases:[{}]}))};const html=c.overlay();assert.equal((html.match(/<li>/g)||[]).length,8);assert.match(html,/Page 1 of 5/);assert.ok(html.indexOf('class="import-footer"')>html.indexOf('class="library-dialog-body"'));assert.match(html,/data-lx="commit"/);});
 test('entering a pinned course clears root-only filters and Back restores browsing context',()=>{const c=controller(40);c.state.filter='pinned';c.page=3;const id=c.store.data.courses[0].id;c.action('open',{kind:'c',id});assert.equal(c.state.filter,'all');assert.equal(c.currentItems().length,40);c.action('back');assert.equal(c.state.filter,'pinned');assert.equal(c.state.course,'');assert.equal(c.browsePage,3);});
 test('transcript-only reimport repairs captions without uploading or replacing audio or progress',async()=>{const c=controller(1),l=c.store.data.lessons[0],audio={id:'original-asset',url:'/api/audio/original-asset'};l.audio=audio;l.videoId='external';l.progress.position=23;c.store.mode='cloud';c.store.flush=async()=>{};c.package={lessons:[{meta:{video_id:'external'},folder:'external',title:l.title,source:'original caption source',segments:[{id:'cue',start:0,end:1,text:'Hello'}],phrases:[{id:'cue',start:0,end:1,text:'Hello'}],notes:[],transcript:'transcript.srt'}]};c.draft={destination:c.store.data.courses[0].id,duplicates:'repair'};c.upload=()=>{throw Error('Repair must not upload assets');};await c.commit();assert.equal(c.summary.repaired,1);assert.equal(l.audio,audio);assert.equal(l.progress.position,23);assert.equal(l.phrases.length,1);assert.equal(c.store.data.lessons.length,1);});
+
+test('an open ZIP summary reflects pending, rejected and confirmed account saves',async()=>{
+ const c=controller(1),store=c.store,save=Promise.withResolvers();
+ store.data.lessons[0].videoId='external';
+ Object.assign(store,{mode:'cloud',pending:true,cacheStatus:'saved',flush:()=>save.promise});
+ c.dialog='import';
+ c.package={lessons:[{meta:{video_id:'external'},title:'Existing lesson'}]};
+ c.draft={destination:store.data.courses[0].id,duplicates:'reuse'};
+ const committing=c.commit();
+ assert.equal(c.summary,null);
+ save.resolve();
+ await committing;
+ const status=()=>c.overlay().match(/<p role="status">(.*?)<\/p>/s)?.[1];
+ assert.equal(c.summary.reused,1);
+ assert.match(status(),/^Saving to your account…/);
+
+ Object.assign(store,{mode:'rejected',saveError:{code:'storage-too-large'}});
+ assert.match(status(),/exceeds account storage limits.*Export a backup/);
+ Object.assign(store,{mode:'cloud',pending:false,saveError:null});
+ assert.equal(status(),'Library saved to your account.');
+ assert.equal(c.summary.reused,1);
+});
+
+test('Library row distinguishes a resume cursor from explicit completion',()=>{
+ const c=controller(1),lesson=c.store.data.lessons[0];
+ Object.assign(lesson,{duration:100,progress:{position:60,coverage:[]}});
+ const row=c.row('l',lesson);
+ assert.match(row,/value="60" aria-label="Resume at 1:00"/);
+ assert.match(row,/<small>Resume at 1:00<\/small>/);
+ assert.doesNotMatch(row,/% (practised|complete|listened)/);
+ lesson.completed=true;
+ assert.match(c.row('l',lesson),/value="100" aria-label="Completed"/);
+});

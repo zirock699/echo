@@ -48,3 +48,145 @@ test('seeking into a gap targets the upcoming cue instead of retaining an unrela
 test('overlapping cues resolve to an earlier cue still active after a short overlap ends',async t=>{const {e}=await fixture(t);e.lesson.phrases=[{id:'long',start:0,end:10,text:'Long caption'},{id:'short',start:2,end:3,text:'Short overlap'}];assert.equal(e.resolvePhrase(4)?.id,'long');assert.equal(e.resolvePhrase(2.5)?.id,'long');});
 
 test('callbacks from a discarded YouTube player cannot mutate its replacement or finish a new phrase',async t=>{const {e,players}=await fixture(t);await e.initialise();const old=players[0];await e.retry();e.seekPhrase('b',false);const phrase=e.current().id,state=e.state;old.config.events.onStateChange({data:0});old.config.events.onError({data:100});old.config.events.onPlaybackRateChange({data:.5});assert.equal(e.current().id,phrase);assert.equal(e.state,state);assert.equal(e.error,'');assert.equal(e.speed,1.5);assert.equal(e.phraseDone,false);});
+
+test('Continuous uses the full timeline and returning to shadowing restores the remembered queue', async t=>{
+ const {e}=await fixture(t);
+ await e.initialise();
+ e.lesson.statuses.a={difficult:true};
+ e.setSelection('difficult');
+ assert.deepEqual(e.eligible().map(p=>p.id),['a']);
+ e.play();
+ e.yt.time=29;
+ e.tick();
+ assert.equal(e.phraseDone,true);
+
+ e.setMode('continuous');
+ assert.deepEqual(e.eligible().map(p=>p.id),['a','b']);
+ assert.equal(e.phraseDone,false);
+ assert.equal(e.time,29);
+ e.next();
+ assert.equal(e.current().id,'b');
+ assert.equal(e.playing,true);
+ e.previous();
+ assert.equal(e.current().id,'a');
+ e.next();
+ e.setMode('automatic');
+ assert.deepEqual(e.eligible().map(p=>p.id),['a']);
+ assert.equal(e.current().id,'a');
+ assert.equal(e.playing,true);
+});
+
+test('an empty filter leaves Continuous untouched and explicit valid filtering selects Manual',async t=>{
+ const {e}=await fixture(t);
+ await e.initialise();
+ e.setMode('continuous');
+ e.play();
+ assert.equal(e.setSelection('difficult'),false);
+ assert.equal(e.mode,'continuous');
+ assert.equal(e.selection,'all');
+ assert.equal(e.current().id,'a');
+ assert.equal(e.playing,true);
+
+ e.lesson.statuses.b={difficult:true};
+ assert.equal(e.setSelection('difficult'),true);
+ assert.equal(e.mode,'manual');
+ assert.deepEqual(e.eligible().map(p=>p.id),['b']);
+ assert.equal(e.current().id,'b');
+});
+
+test('session history measures only its own listening and deliberate marks',async t=>{
+ const {e}=await fixture(t);
+ await e.initialise();
+ e.lesson.progress.coverage=[[31,32]];
+ e.lesson.statuses={a:{practised:true},b:{practised:true,difficult:true}};
+ e.next();
+ e.pause();
+ let result=e.finishSession();
+ assert.equal(result.metricsVersion,1);
+ assert.deepEqual(result.coveredIds,[]);
+ assert.equal(result.activeSeconds,0);
+ assert.equal(result.practised,1);
+ assert.equal(result.difficult,0);
+
+ e.seekPhrase('a',true);
+ e.yt.time=27.14;e.tick();
+ e.yt.time=27.28;e.tick();
+ e.recordMark('a','practised');
+ e.recordMark('a','practised');
+ e.recordMark('a','difficult');
+ e.recordMark('b','difficult');
+ e.recordMark('b','difficult',false);
+ e.pause();
+ result=e.finishSession();
+ assert.deepEqual(result.coveredIds,['a']);
+ assert.ok(result.activeSeconds>0);
+ assert.equal(result.practised,1);
+ assert.equal(result.difficult,1);
+ assert.deepEqual(e.lesson.progress.coverage.at(-1),[31,32]);
+ assert.equal(e.lesson.statuses.b.difficult,true);
+
+ e.play();
+ e.pause();
+ result=e.finishSession();
+ assert.deepEqual(result.coveredIds,[]);
+ assert.equal(result.practised,0);
+ assert.equal(result.difficult,0);
+});
+
+test('session coverage does not count short cue gaps passed by an explicit seek or edit preview',async t=>{
+ const {e}=await fixture(t);
+ await e.initialise();
+ e.previewRange(31,32);
+ e.yt.time=31.1;e.tick();
+ e.yt.time=31.2;e.tick();
+ assert.equal(e.finishSession(),null);
+
+ e.lesson.phrases=[{id:'a',start:27,end:27.1},{id:'skip',start:27.11,end:27.13},{id:'b',start:27.14,end:29}];
+ e.setMode('continuous');
+ e.seekRecording(27,true);
+ e.yt.time=27.06;e.tick();
+ e.yt.time=27.1;e.tick();
+ e.seekRecording(27.14,true);
+ e.yt.time=27.15;e.tick();
+ e.yt.time=27.19;e.tick();
+ e.pause();
+ assert.deepEqual(e.finishSession().coveredIds,['a','b']);
+});
+
+test('recording seek after cue replacement preserves position and resolves only restored cues',async t=>{
+ const {e}=await fixture(t);
+ await e.initialise();
+ e.setMode('continuous');
+ e.seekPhrase('a',false);
+ e.lesson.progress.coverage=[[27,29]];
+ e.lesson.phrases=[{id:'restored-a',start:25,end:29},{id:'restored-b',start:31,end:33},{id:'overlap',start:32,end:34}];
+ e.seekRecording(30,false);
+ assert.equal(e.current().id,'restored-a');
+ assert.equal(e.yt.time,30);
+ assert.equal(e.playing,false);
+
+ e.yt.getTimeBounds=()=>({start:32.5,end:80});
+ e.seekRecording(30,true);
+ assert.equal(e.current().id,'restored-b');
+ assert.equal(e.yt.time,32.5);
+ assert.equal(e.playing,true);
+ assert.deepEqual(e.lesson.progress.coverage,[[27,29]]);
+});
+
+for(const mode of ['manual','automatic']){
+ test(`${mode} reload stays at the saved gap after Undo maps it to the next restored cue`,async t=>{
+  const {e}=await fixture(t);
+  const restored=lesson();
+  restored.phrases=[{id:'restored-a',start:0,end:1},{id:'restored-b',start:4,end:5}];
+  restored.progress={position:2,phraseId:'restored-b',coverage:[[0,.6]]};
+  e.load(restored,{mode,leadIn:.1});
+  await e.initialise();
+  e.tick();
+
+  assert.equal(e.time,2);
+  assert.equal(e.yt.time,2);
+  assert.equal(e.current().id,'restored-b');
+  assert.equal(e.playing,false);
+  assert.deepEqual(restored.progress.coverage,[[0,.6]]);
+ });
+}

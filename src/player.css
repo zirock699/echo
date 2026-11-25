@@ -88,6 +88,10 @@ body.view-player .queue-panel .micro,body.view-player .phrase-row-meta,body.view
 body.view-player .phrase-row-text { color:#eee8f8; }
 body.view-player .phrase-row.selected { background:#a26ae41c; border-color:#be91fc44; }
 body.view-player .queue-panel .icon-btn,body.view-player .queue-panel .btn { color:#d4c8e7; }
+.queue-pagination { display:flex; flex:none; gap:8px; padding:8px 10px 5px; color-scheme:dark; }
+.queue-pagination select { flex:1; min-width:0; min-height:44px; padding:6px 8px; font-size:13px; background:transparent; color:#d4c8e7; border-color:color-mix(in srgb,currentColor 55%,transparent); }
+.queue-pagination .btn { flex:none; min-height:44px; padding-inline:8px; }
+.queue-pagination :focus-visible { outline-color:#d4c8e7; }
 body.view-player .modal-shade { background:#09081780; }
 body.view-player .modal { background:var(--bg2); color:var(--text); }
 body.view-player .modal-shade:has(.modal[aria-label=Options]) { align-items:flex-start; justify-content:flex-end; padding:90px 115px 20px; }
@@ -232,6 +236,7 @@ body.view-player.light .word.current-word { color:white; }
  body.view-player.queue-open .practice-body { display:flex; }
  .audio-only .phrase-panel { min-height:200px; }
 }
+body.view-player .queue-panel[data-retained],body.view-player .modal[aria-label=Options][data-retained] { animation:none; }
 @keyframes sheet-enter { from { opacity:0; transform:translateY(30px); } to { opacity:1; transform:none; } }
 @property --ambient-primary { syntax:'<color>'; inherits:true; initial-value:#291442; }
 @property --ambient-secondary { syntax:'<color>'; inherits:true; initial-value:#25183c; }

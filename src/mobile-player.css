@@ -21,18 +21,16 @@ body.view-player .player-page .player-top,body.view-player.light .player-page .p
 .phrase-text { min-height:0; padding:0; overflow-wrap:anywhere; }
 .phrase-inner { min-width:0; }
 .phrase-panel>.phrase-text { display:grid; align-content:center; height:100%; overflow-y:auto; }
-.lyrics-viewport { position:relative; width:100%; height:100%; min-height:0; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; scrollbar-width:none; mask-image:linear-gradient(transparent,#000 8%,#000 90%,transparent); }
+.lyrics-viewport { position:relative; width:100%; height:100%; min-height:0; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; scrollbar-width:none; }
 .lyrics-viewport::-webkit-scrollbar { display:none; }
 .lyrics-track { position:relative; width:100%; max-width:760px; margin:auto; padding:var(--lyric-space,180px) 8px; }
-.lyric-row { font-size:clamp(25px,2.7vw,38px); font-weight:550; line-height:1.38; letter-spacing:-.025em; margin:0 0 28px; text-align:left; color:var(--player-text); transition:opacity .3s ease; content-visibility:auto; contain-intrinsic-size:auto 80px; }
+.lyric-row { font-size:clamp(25px,2.7vw,38px); font-weight:550; line-height:1.38; letter-spacing:-.025em; margin:0 0 28px; text-align:left; color:var(--player-text); color:color-mix(in srgb,var(--player-text) 40%,var(--player-sub)); content-visibility:auto; contain-intrinsic-size:auto 80px; }
 .lyric-row[data-distance="0"],.lyric-row[data-distance="1"],.lyric-row[data-distance="2"] { content-visibility:visible; }
-.lyric-row[data-distance="1"] { opacity:.55; }
-.lyric-row[data-distance="2"] { opacity:.35; }
-.lyric-row[data-distance="3"] { opacity:.24; }
-.lyrics-viewport.is-browsing .lyric-row { opacity:.65; }
-.lyric-row.is-current { opacity:1; font-weight:650; }
+.lyric-row[data-distance="1"],.lyrics-viewport.is-browsing .lyric-row:not(.is-current) { color:color-mix(in srgb,var(--player-text) 60%,var(--player-sub)); }
+.lyric-row.is-current { color:var(--player-text); font-weight:650; }
 .lyric-select { display:block; width:100%; min-height:44px; border:0; border-radius:8px; padding:0; text-align:inherit; color:inherit; background:none; font:inherit; letter-spacing:inherit; line-height:inherit; cursor:pointer; }
-.lyric-select:hover { color:var(--player-accent); }
+.lyric-select:hover,.lyric-select:focus-visible { color:var(--player-text); text-decoration:underline; text-underline-offset:.16em; }
+.lyric-select:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
 .lyrics-track .lyric-current { display:block; height:auto; max-height:none; min-height:0; padding:0; overflow:visible; font-size:inherit!important; font-weight:inherit; line-height:inherit!important; letter-spacing:inherit; }
 .lyrics-follow { position:absolute; z-index:4; right:8px; bottom:8px; margin:0; min-height:36px; padding:6px 12px; color:var(--text); background:var(--bg2); border:1px solid var(--line); border-radius:18px; font:inherit; font-size:13px; }
 

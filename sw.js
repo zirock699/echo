@@ -1,4 +1,33 @@
-const CACHE='echo-studio-app-v22';const ASSETS=['/','/index.html','/src/app.mjs','/src/style.css','/src/player.css','/src/player-layout.mjs','/src/mobile-player.css','/src/ambient.mjs','/src/vendor-colorthief.mjs','/src/transcript.mjs','/src/player.mjs','/src/playback-recovery.mjs','/src/audio.mjs','/src/practice.mjs','/src/ui-icons.mjs','/src/category-rules.mjs','/src/search-ui.mjs','/src/input-focus.mjs','/src/lyrics.mjs','/src/home.mjs','/src/shelf-navigation.mjs','/src/sync-notice.mjs','/src/store.mjs','/src/ipa.mjs','/assets/icon.svg','/manifest.webmanifest'];
-self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));});
-self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim()));});
-self.addEventListener('fetch',e=>{const url=new URL(e.request.url);if(e.request.method!=='GET'||url.origin!==location.origin||url.pathname.startsWith('/api/'))return; e.respondWith(fetch(e.request).then(r=>{if(r.ok&&ASSETS.includes(url.pathname)){const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy));}return r;}).catch(()=>caches.match(e.request)));});
+// The build and local preview prepend the same content-addressed shell manifest.
+const {cache:cacheName,assets}=SHELL;
+
+function assetRequest(pathname){
+ return new Request(new URL(pathname,self.location.origin),{
+  cache:'reload',redirect:'error',integrity:assets[pathname],
+ });
+}
+
+self.addEventListener('install',event=>{
+ // addAll leaves the previous shell available if any asset is missing or differs.
+ event.waitUntil(caches.open(cacheName).then(cache=>cache.addAll(Object.keys(assets).map(assetRequest))));
+});
+
+self.addEventListener('activate',event=>{
+ event.waitUntil((async()=>{
+  const names=await caches.keys();
+  await Promise.all(names.filter(name=>name!==cacheName&&name.startsWith('echo-studio-app-'))
+   .map(name=>caches.delete(name)));
+  await self.clients.claim();
+ })());
+});
+
+self.addEventListener('fetch',event=>{
+ const {request}=event;
+ const url=new URL(request.url);
+ const pathname=url.pathname==='/'?'/index.html':url.pathname;
+ if(request.method!=='GET'||url.origin!==self.location.origin||url.search||!Object.hasOwn(assets,pathname))return;
+ event.respondWith((async()=>{
+  const cache=await caches.open(cacheName);
+  return await cache.match(new URL(pathname,self.location.origin))??fetch(assetRequest(pathname));
+ })());
+});
