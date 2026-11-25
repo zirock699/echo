@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#151c20">
+  <title>Echo Studio · Design comparison</title>
+  <link rel="stylesheet" href="review.css">
+  <script src="review.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#comparison">Skip to screen comparison</a>
+  <header class="wrap introduction">
+    <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h3l2.4-5.2L11 18l3.4-12 2.8 8H22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Echo Studio</div>
+    <div class="header-row">
+      <h1>Two ways into<br> spoken practice.</h1>
+      <p>Compare the current app with two working design prototypes. Both use fictional lessons and synthetic audio. A prototype take uses a supplied sample.</p>
+    </div>
+    <div class="launchers" aria-label="Interactive prototypes">
+      <a class="launch" href="a/index.html"><span>A · The Listening Room</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+      <a class="launch" href="b/index.html"><span>B · Rehearsal Desk</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    </div>
+  </header>
+  <main class="wrap" id="comparison">
+    <section aria-labelledby="compare-title">
+      <div class="comparison-heading">
+        <div><h2 id="compare-title">Compare screens</h2><p>Pick a task and viewport. Select an image to open it at full size.</p></div>
+        <label class="viewport">Viewport
+          <select id="viewport">
+            <option value="390x844">Phone · 390 × 844</option>
+            <option value="430x932">Large phone · 430 × 932</option>
+            <option value="768x1024">Tablet · 768 × 1024</option>
+            <option value="1440x900">Desktop · 1440 × 900</option>
+          </select>
+        </label>
+      </div>
+      <nav class="screen-choices" aria-label="Screens to compare">
+        <button type="button" data-screen="home" aria-pressed="true">Start</button>
+        <button type="button" data-screen="library" aria-pressed="false">Library</button>
+        <button type="button" data-screen="player" aria-pressed="false">Player</button>
+        <button type="button" data-screen="comparison" aria-pressed="false">Record &amp; compare</button>
+        <button type="button" data-screen="activities" aria-pressed="false">Activities</button>
+        <button type="button" data-screen="history" aria-pressed="false">Return</button>
+      </nav>
+      <p id="comparison-status" class="sr-only" role="status"></p>
+      <div id="frames" class="frames"></div>
+      <noscript><p>Open either prototype above or use the screenshots in the downloaded folders.</p></noscript>
+    </section>
+
+    <section class="decision" aria-labelledby="decision-title">
+      <div><h2 id="decision-title">Recommend The Listening Room</h2><p>The phrase, transport and next practice action stay together. The desktop player leaves room to browse passages, and the user can return from their library at the same position. A fresh speaking cue is still one action from Studio.</p></div>
+      <dl>
+        <dt>A · The Listening Room</dt><dd>Best for building a regular practice around material the user has chosen and wants to hear again.</dd>
+        <dt>B · Rehearsal Desk</dt><dd>Starts with a message the user wants to deliver. A reference, drill or optional private reflection can support that rehearsal.</dd>
+      </dl>
+    </section>
+
+    <section class="journeys" aria-labelledby="journeys-title">
+      <div><h2 id="journeys-title">Try the same jobs</h2><p>Start each prototype at its opening screen. A fresh tab gives you a new session.</p></div>
+      <ol>
+        <li><strong>Speak now.</strong> Give a colleague the new draft date and ask for a reply.</li>
+        <li><strong>Continue a reference.</strong> Open <em>Move a deadline</em>, deliberately play the saved phrase, then replay or advance.</li>
+        <li><strong>Find and keep something.</strong> Search for <em>deadline</em>, add it to favourites, then find your collection.</li>
+        <li><strong>Compare a take.</strong> Listen to the reference, make an example take and switch between the two. Finish with a clear next action.</li>
+        <li><strong>Return.</strong> Find the session in the activity record and return to its reference or start another speaking turn.</li>
+      </ol>
+    </section>
+    <footer class="review-footer"><a href="review-notes.md">Review notes and design system</a><span>Baseline app captured at 1497245</span></footer>
+  </main>
+</body>
+</html>
