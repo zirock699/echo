@@ -4,7 +4,7 @@ const homeCue = {
   situation: 'Your colleague expects the figures on Tuesday. They’ll be ready on Thursday. Ask your colleague to check them on Friday.',
   task: 'Say the update in your own words.',
   note: 'One short reply is enough. You can plan silently.',
-  exit: 'Back to Home',
+  exit: 'Back to Rehearse',
 };
 const transferCue = {
   kind: 'transfer-prompt',
@@ -16,9 +16,30 @@ const transferCue = {
 };
 const playerCue = {...transferCue, exit: 'Back to player'};
 
+const drillCue = {kind: 'drill-prompt', exit: 'Back to drills'};
+export const practiceDrills = {
+  clarity: {...drillCue, id: 'clarity', title: 'Make the key detail clear', icon: 'volume',
+    description: 'Help the listener pick out a changed time.',
+    situation: 'Apprentices have been told the workshop starts at nine. The room now opens at half past nine. Ask them to bring their notes.',
+    task: 'Give the update with the new time easy to hear.', note: 'Try once more with a short pause before the new time.'},
+  rhythm: {...drillCue, id: 'rhythm', title: 'Give the message room', icon: 'wave',
+    description: 'Use a pause to separate a decision from a request.',
+    situation: 'A colleague needs to know that the interview can go ahead. Ask them to send the address before the end of the day.',
+    task: 'Say the decision, pause briefly, then make the request.', note: 'Take another pass if the two parts run together.'},
+  wording: {...drillCue, id: 'wording', title: 'Find a useful expression', icon: 'edit',
+    description: 'Use a phrase in an unfamiliar situation.',
+    situation: 'The final artwork won’t arrive until lunch. Ask the team to check the captions while they wait.',
+    task: 'Give the update in your own words. Try “in the meantime” if it fits.', note: 'Try saying it again with a different expression.'},
+  delivery: {...drillCue, id: 'delivery', title: 'Change the delivery', icon: 'spark',
+    description: 'Try the same request with a different tone.',
+    situation: 'Your teammate has been busy. Ask them to take a quick look at the estimate before the call.',
+    task: 'Say it once as a friendly invitation and once as a direct request.', note: 'Choose the version that feels right for the relationship.'},
+};
+
 export function practiceCue(modal) {
   if (modal?.type === homeCue.kind) return homeCue;
   if (modal?.type === transferCue.kind) return modal.from === 'player' ? playerCue : transferCue;
+  if (modal?.type === drillCue.kind && Object.hasOwn(practiceDrills, modal.from)) return practiceDrills[modal.from];
   return null;
 }
 

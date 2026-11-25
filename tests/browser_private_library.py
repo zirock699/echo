@@ -42,7 +42,7 @@ def run():
         resume = page.get_by_role('button', name='Resume lesson')
         expect(resume).to_contain_text('Private “A” <notes>')
         expect(resume).to_have_attribute('data-id', 'shared "legacy" id')
-        page.locator('.home-appbar').get_by_role('button', name='Settings', exact=True).click()
+        page.locator('#rehearsal-settings').click()
         current['offline'] = True
         page.locator('[data-pref=theme]').select_option('light')
         notice = page.get_by_role('complementary', name='Synchronisation status')
@@ -65,7 +65,7 @@ def run():
         current['account'] = 'a'
         page.get_by_role('button', name='Retry', exact=True).click()
         expect(page.get_by_role('button', name='Resume lesson')).to_contain_text('Private “A” <notes>')
-        page.locator('.home-appbar').get_by_role('button', name='Settings', exact=True).click()
+        page.locator('#rehearsal-settings').click()
         expect(page.locator('[data-pref=theme]')).to_have_value('light')
         page.get_by_role('button', name='Back', exact=True).click()
         resume.click()

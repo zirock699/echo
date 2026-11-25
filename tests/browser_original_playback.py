@@ -60,7 +60,7 @@ def run():
         expect(transport).to_have_attribute('aria-label', 'Pause')
         transport.click()
 
-        page.get_by_role('button', name='Restart current phrase', exact=True).click()
+        page.get_by_role('button', name='Replay current phrase', exact=True).click()
         page.wait_for_function('media.find(a => !a.paused)?.currentTime >= 2')
         position = page.evaluate('media.find(a => !a.paused).currentTime')
         assert 2 <= position < 2.5, position

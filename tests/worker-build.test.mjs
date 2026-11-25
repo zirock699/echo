@@ -68,7 +68,8 @@ test('built Worker serves app assets and routes state and audio requests', async
   for (const path of ['/missing-asset', '/.openai/hosting.json', '/server/worker.mjs', '/src/app-alias.mjs', '/src/local-notes.txt']) {
     assert.equal((await route(path)).status, 404, path);
   }
-  for (const path of ['/tests/viewport.html', '/tests/notices.html', '/assets/colorthief-LICENSE.txt']) {
+  for (const path of ['/tests/viewport.html', '/tests/notices.html', '/assets/colorthief-LICENSE.txt',
+    '/assets/rehearsal-bricolage-OFL.txt', '/assets/rehearsal-instrument-OFL.txt']) {
     assert.equal((await route(path)).status, 200, path);
   }
 
@@ -84,11 +85,17 @@ test('built Worker serves app assets and routes state and audio requests', async
   const modulesAndStyles = readdirSync(join(staging, 'src'), { withFileTypes: true })
     .filter(entry => entry.isFile() && /^[\w-][\w.-]*\.(?:mjs|css)$/.test(entry.name))
     .map(entry => '/src/' + entry.name);
-  const expected = new Set(['/index.html', ...entryFiles, ...icons, ...modulesAndStyles]);
+  const rehearsalMedia = new Map([
+    ['/assets/rehearsal-home.webp', 'image/webp'],
+    ['/assets/rehearsal-bricolage.woff2', 'font/woff2'],
+    ['/assets/rehearsal-instrument.woff2', 'font/woff2'],
+  ]);
+  const expected = new Set(['/index.html', ...entryFiles, ...icons, ...modulesAndStyles, ...rehearsalMedia.keys()]);
   assert.deepEqual(Object.keys(shell.assets), [...expected].sort());
   for (const [path, digest] of Object.entries(shell.assets)) {
     const cached = await route(path);
     assert.equal(cached.status, 200, path);
+    if (rehearsalMedia.has(path)) assert.equal(cached.headers.get('content-type'), rehearsalMedia.get(path), path);
     const bytes = Buffer.from(await cached.arrayBuffer());
     assert.equal(integrity(bytes), digest, path);
     if (!path.endsWith('.mjs')) continue;

@@ -115,17 +115,17 @@ def run():
             return page.get_by_role('button', name=name, exact=True)
 
         expect(button('Resume lesson')).to_contain_text(VIDEO)
-        button('Try a speaking prompt').click()
+        button('Talk now').click()
         expect(page.get_by_role('dialog', name='Speaking prompt')).to_be_visible()
-        button('Back to Home').click()
+        button('Back to Rehearse').click()
 
         nav.locator('[data-view=library]').click()
         page.locator('.library-open').filter(has_text='Fixture course').click()
         expect(page.locator('.library-open').filter(has_text=VIDEO)).to_be_visible()
-        nav.locator('[data-view=search]').click()
+        page.locator('.library-destinations [data-view=search]').click()
         page.get_by_role('searchbox', name='Search lessons, courses and collections').fill('Fixture')
         expect(page.locator('.search-result').filter(has_text=VIDEO)).to_be_visible()
-        nav.locator('[data-view=collections]').click()
+        page.locator('.library-destinations [data-view=collections]').click()
         page.locator('.collection-open').filter(has_text='Fixture collection').click()
         expect(page.locator('.collection-member').filter(has_text=VIDEO)).to_be_visible()
 
@@ -188,7 +188,7 @@ def run():
         library['preferences']['startupLesson'] = 'native'
         fixture.save_library(library)
         page, provider, errors = open_page(fixture)
-        expect(button('Try a speaking prompt')).to_be_visible()
+        expect(button('Talk now')).to_be_visible()
         page.wait_for_function('fixtureAudio.some(audio => audio.paused && audio.readyState >= 1)')
         assert not provider, provider
         assert not errors, errors

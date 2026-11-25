@@ -56,7 +56,8 @@ def run():
         def button(name):
             return page.get_by_role('button', name=name, exact=True)
 
-        nav.locator('[data-view=collections]').click()
+        nav.locator('[data-view=library]').click()
+        page.locator('.library-destinations [data-view=collections]').click()
         button('New collection').click()
         page.locator('#collection-name').fill('Focused practice')
         button('Save collection').click()
@@ -130,7 +131,7 @@ def run():
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (width, height)
             for control in [
                 button('Back'), button('Phrase queue'), transport, button('Listen then record'),
-                button('Next phrase'), button('Restart current phrase'), button('Player settings'),
+                button('Next phrase'), button('Replay current phrase'), button('Player settings'),
             ]:
                 rect = control.bounding_box()
                 assert rect and rect['width'] >= 44 and rect['height'] >= 44, (control, rect, width)
@@ -148,7 +149,7 @@ def run():
 
         nav.locator('[data-view=home]').click()
         settings = page.get_by_role('heading', name='Settings', exact=True)
-        home_settings = page.locator('.home-appbar').get_by_role('button', name='Settings', exact=True)
+        home_settings = page.locator('#rehearsal-settings')
         home_settings.click()
         expect(settings).to_be_visible()
         button('Back').click()
@@ -160,14 +161,15 @@ def run():
         playing(1)
 
         nav.locator('[data-view=library]').click()
-        page.locator('.library-app-actions').get_by_role('button', name='Settings', exact=True).click()
+        page.locator('#rehearsal-settings').click()
         expect(settings).to_be_visible()
         button('Back').click()
         expect(page.locator('.library-screen')).to_be_visible()
 
         page.locator('#compact-toggle').click()
         playing(0)
-        nav.locator('[data-view=collections]').click()
+        nav.locator('[data-view=library]').click()
+        page.locator('.library-destinations [data-view=collections]').click()
         collection.click()
         expect(heading).to_have_text('Daily practice')
         for width, height in [(320, 568), (390, 844), (430, 932), (844, 390), (820, 1180), (1440, 900)]:
@@ -175,7 +177,7 @@ def run():
             expect(heading).to_have_text('Daily practice')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (width, height)
             if (width, height) == (844, 390):
-                expect(page.locator('.sidebar')).to_be_hidden()
+                expect(page.locator('.rehearsal-nav')).to_be_hidden()
                 expect(nav).to_be_visible()
 
         page.set_viewport_size({'width': 390, 'height': 844})
@@ -185,7 +187,8 @@ def run():
         expect(page.locator('body.light')).to_be_visible()
         button('Back').click()
         expect(page.locator('.home-screen')).to_be_visible()
-        nav.locator('[data-view=collections]').click()
+        nav.locator('[data-view=library]').click()
+        page.locator('.library-destinations [data-view=collections]').click()
         collection.click()
         expect(heading).to_have_text('Daily practice')
 

@@ -354,16 +354,6 @@ body.light .player-artwork { filter:blur(24px); opacity:.12; }
 .recording-tools audio { display:block; width:100%; margin:12px 0; }
 @media(max-width:760px), (max-width:1024px) and (max-height:520px) and (pointer:coarse) { .library-overlay { align-items:flex-end; padding:0; } .library-overlay .modal { border-radius:22px 22px 0 0; max-height:88dvh; padding-bottom:calc(20px + env(safe-area-inset-bottom)); } .library-row { gap:0; padding:6px; } .library-open { gap:10px; } .library-heading h1 { font-size:26px; } .library-screen .text-link { min-height:44px; } }
 @media(max-width:360px) { .library-art { width:48px; height:64px; } .library-copy strong { font-size:14px; } .library-row>.icon-btn { width:36px; } }
-body.view-player.imported-player { --player-text:#f4f4f2; --player-sub:#c1c4cc; --player-line:#ffffff26; --player-accent:#e6d9a0; background:#101114; }
-body.view-player.imported-player::before { background:linear-gradient(#10111455,#101114b8); }
-body.view-player.imported-player::after { display:none; }
-body.view-player.imported-player .player-top { background:#10111485; }
-body.view-player.imported-player .practice-primary { background:#e6d9a0; color:#202017; box-shadow:none; border-color:#f0e6be; }
-body.view-player.imported-player .practice-next,body.view-player.imported-player .reset-phrase { background:#ffffff0d; box-shadow:none; border-color:var(--player-line); }
-body.view-player.imported-player.light { --player-text:#20231f; --player-sub:#555b53; --player-line:#20231f33; background:#f5f5f2; }
-body.view-player.imported-player.light::before { background:linear-gradient(#f5f5f266,#f5f5f2b8); }
-body.view-player.imported-player.light .player-top { background:#ffffff80; }
-body.view-player.imported-player.light .practice-primary { background:#665322; color:#fff; }
 /* Bounded mobile library: one content mode, one scrolling surface. */
 body.view-library .page { padding-top:12px; }
 .view-library .topbar { height:24px; margin-bottom:6px; }

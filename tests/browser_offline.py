@@ -182,7 +182,8 @@ def offline_recovery(fixture, page, private_media, assets):
 
     context.set_offline(True)
     expect_library(page)
-    page.locator('.mobile-nav [data-view=collections]').click()
+    page.locator('.mobile-nav [data-view=library]').click()
+    page.locator('.library-destinations [data-view=collections]').click()
     page.get_by_role('button', name='New collection', exact=True).click()
     page.locator('#collection-name').fill(COLLECTION)
     page.get_by_role('button', name='Save collection', exact=True).click()
@@ -278,7 +279,8 @@ def run():
         with browser_fixture(__doc__, 'built Worker and synthetic private WAV', script=helper) as fixture:
             original = shell_manifest(fixture)
             expected = {'/index.html', '/manifest.webmanifest', '/assets/icon.svg',
-                        '/assets/icon-192.png', '/assets/icon-512.png'}
+                        '/assets/icon-192.png', '/assets/icon-512.png', '/assets/rehearsal-home.webp',
+                        '/assets/rehearsal-bricolage.woff2', '/assets/rehearsal-instrument.woff2'}
             expected.update(f'/src/{path.name}' for path in (stage / 'original/src').iterdir()
                             if path.is_file() and re.fullmatch(r'[\w-][\w.-]*\.(mjs|css)', path.name))
             assert set(original['assets']) == expected

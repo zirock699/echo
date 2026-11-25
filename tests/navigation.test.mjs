@@ -6,3 +6,16 @@ test('closing a sheet consumes its entry instead of reopening it on the next Bac
 test('sheet completion into a new collection replaces the sheet entry',async()=>{const {nav,restored}=fixture();nav.commit(route('collections'));nav.commit(route('collections',{overlay:true}));nav.commit(route('collections',{collections:{id:'new'}}));nav.back();await Promise.resolve();assert.equal(restored.at(-1).view,'collections');assert.equal(restored.at(-1).collections,undefined);});
 test('ordinary updates replace current entry, not every keystroke or playback tick',()=>{const {nav,states}=fixture();nav.commit(route('library',{library:{state:{query:''}}}));for(let i=0;i<20;i++)nav.commit(route('library',{library:{state:{query:'test'+i}}}));assert.equal(states.length,2);});
 test('same-document reload retains a usable previous-entry index and scroll restoration data',async()=>{const {nav,history,restored}=fixture();nav.commit(route('settings'));nav.rememberScroll(350);let snapshot;const next=new ScreenHistory({history,restore:s=>snapshot=s});next.start(route('home'));assert.equal(snapshot.view,'settings');assert.equal(snapshot.scroll,350);assert.equal(next.current.index,1);});
+
+test('reopening the same reference explicitly from Journal preserves a way back to Journal', async () => {
+ const {nav, restored}=fixture();
+ const reference={lessonId:'same-lesson'};
+ nav.commit(route('player',reference));
+ nav.commit(route('player',{...reference,overlay:true}));
+ nav.commit(route('journal'));
+ nav.commit(route('player',reference),{keepPrevious:true});
+ assert.equal(nav.current.snapshot.view,'player');
+ nav.back();
+ await Promise.resolve();
+ assert.equal(restored.at(-1).view,'journal');
+});

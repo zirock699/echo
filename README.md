@@ -65,7 +65,7 @@ Timed audio lessons support listen-then-record practice with an expandable wavef
 
 ## Speaking practice
 
-Use **Try a speaking prompt** on Home for a short fictional situation. With a selected phrase, **Try a new conversation** is available from the quiet player and from **Player settings → Practice**. Video playback opens when a YouTube reference is deliberately selected. [Speaking practice handoff](docs/product/speaking-prompt-handoff.md) · [Private pilot materials](docs/transformation/pilot-materials.md)
+Choose **Talk now** in Rehearse for a short fictional situation, or pick a focused speaking drill. **Library** includes references, favourites, search and collections. **Journal** shows completed sessions and optional notes. With a selected phrase, **Try a new conversation** is available in the quiet player and in **Player settings → Practice**. Video playback opens when a YouTube reference is deliberately selected. [Rehearsal Desk design](DESIGN.md) · [Private pilot materials](docs/transformation/pilot-materials.md)
 
 ## Main files
 

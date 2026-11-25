@@ -2,7 +2,14 @@
 
 ## Authority and scope
 
-Echo Studio is a personal, audio-first speech-shadowing studio, not a generic media dashboard. Preserve its premium music-player direction: quiet dark surfaces, restrained violet accents, soft elevation, and phrase-led practice. This document records rules for future work; it does not claim every accessibility target below is already implemented.
+Echo Studio is a personal spoken-practice studio. The player remains phrase-led, with direct transport and private practice. The approved Rehearsal Desk direction sets the current visual and navigation hierarchy. Earlier composition and palette sections below record the previous interface and its functional requirements.
+
+## Rehearsal Desk · approved 25 November 2026
+
+- **Rehearse** leads with an original situation and **Talk now**. A saved reference opens at its position for deliberate playback. A separate drill choice offers short, text-only exercises. Existing reference shelves are available on request.
+- **Library** groups references, favourites, collections and search. **Journal** shows completed activity and optional notes saved on the verified account. Reopening a Journal item uses the lesson's current saved position and stays paused. An earlier session records what happened in that session.
+- Warm paper and ink blue give the light appearance its base. The dark appearance uses deep ink surfaces. The player uses an ink stage and yellow primary transport. Bricolage Grotesque directs attention to the task, and Instrument Sans supports controls and longer reading. Both fonts are served locally. [Shell styles](src/rehearsal.css)
+- Replay, Play and Next sit on one aligned row. Record and the optional conversation action use a quieter reserved area. Phrase seek and utility controls share a centre line, with the phrase time underneath. Comparison opens from a successful explicit Stop, and the person chooses whether to listen or keep a take. [Player styles](src/player.css) · [Echo Mirror](docs/ECHO_MIRROR.md)
 
 Read `spec.md`, especially **Confirmed updates and precedence**, and `docs/PLAYER_DECISIONS.md`. Later confirmed requirements override older specification sections and reference compositions. The latest user-supplied references are described below. `docs/reference-mobile.png` and `docs/reference-desktop.png` are earlier references, not the sole visual authority or current video dimensions. `docs/screenshots/` contains an older, larger-video revision. Do not restore that layout.
 

@@ -144,7 +144,7 @@ def check_clock(fixture, recording, phrases):
     seek(0)
     seek(2)
     seek(1)
-    button('Restart current phrase').click()
+    button('Replay current phrase').click()
     wait_for_audio('!audio.paused && audio.currentTime >= arg', phrases[1]['start'])
     phrase(1)
     assert phrases[1]['start'] <= current() < phrases[1]['end']
@@ -152,7 +152,7 @@ def check_clock(fixture, recording, phrases):
 
     options(lead=.5)
     seek(1)
-    button('Restart current phrase').click()
+    button('Replay current phrase').click()
     wait_for_audio('!audio.paused && audio.currentTime < arg', phrases[1]['start'])
     phrase(1)
     assert current() < phrases[1]['start']
@@ -244,7 +244,7 @@ def check_zip(fixture, folder, recording, phrases):
 
     fixture.save_library(library_with())
     page, errors = fixture.open_page(390, 844)
-    page.locator('.mobile-nav').get_by_role('button', name='Add lessons', exact=True).click()
+    page.locator('#rehearsal-add').click()
     page.get_by_role('button', name='Import ZIP').click()
     page.locator('#zip-file').set_input_files(str(archive))
     page.get_by_role('button', name='Import lessons', exact=True).click()

@@ -43,6 +43,7 @@ JOURNEYS = {
         browser_suite('original_playback'),
         browser_suite('sync'),
         browser_suite('player_focus'),
+        browser_suite('rehearsal_desk'),
         browser_suite('queue_window'),
     ),
     'recover': (

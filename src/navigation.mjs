@@ -14,8 +14,8 @@ export class ScreenHistory {
  }
  write(push){const state={...(this.history.state||{}),echoNavigation:this.current};this.history[push?'pushState':'replaceState'](state,'',this.url(this.current.snapshot));}
  rememberScroll(y){if(!this.ready||this.pending||this.applying)return;this.current.snapshot.scroll=y;this.write(false);}
- commit(snapshot){if(!this.ready||this.applying||this.pending)return;const current=this.current,key=this.key(snapshot),oldKey=this.key(current.snapshot);if(key===oldKey){this.current={...current,snapshot:{...snapshot,scroll:current.snapshot.scroll||0}};this.write(false);return;}
-  if(key===current.prevKey){this.back();return;}
+ commit(snapshot,{keepPrevious=false}={}){if(!this.ready||this.applying||this.pending)return;const current=this.current,key=this.key(snapshot),oldKey=this.key(current.snapshot);if(key===oldKey){this.current={...current,snapshot:{...snapshot,scroll:current.snapshot.scroll||0}};this.write(false);return;}
+  if(key===current.prevKey&&!keepPrevious){this.back();return;}
   // Ordinary sheet transitions share an entry. A nested step backs out to its opener sheet.
   const nested=snapshot.overlay&&snapshot.nestedOverlay&&current.snapshot.overlay&&!current.snapshot.nestedOverlay&&this.base(snapshot)===this.base(current.snapshot);
   const replace=current.snapshot.overlay&&!nested;

@@ -1,10 +1,10 @@
 # Echo Mirror
 
-Mirror is available on imported or uploaded audio lessons with a valid timed phrase. The player keeps its existing replay/next controls and uses a split main control: the larger area plays, the smaller **Record** area requests microphone access, plays the original phrase, then starts recording. Tap **Stop** when finished. During permission or original playback, the smaller area offers **Cancel**.
+Mirror is available on imported or uploaded audio lessons with a valid timed phrase. **Record** requests microphone access, plays the reference phrase, then starts recording. **Cancel** is available during permission or reference playback. When you tap **Stop**, a successful take opens **Listen back**. Replay, Play and Next stay together on the playback row.
 
-There is no countdown, silence detection, trimming, time stretching, automatic alignment, scoring or AI service. Any delay before speaking remains in the recording. Capturing an attempt never automatically plays it. The comparison panel stays closed after recording, with a quiet ready message.
+Any delay before speaking remains in the recording. Choose a comparison track to play it. Closing Listen back returns to the player at the original position.
 
-Open **Compare** to see the original and latest attempt. The previous attempt is expandable. Play controls are independent and mutually exclusive: playing one stops the other. Waveforms share a time scale beginning at each recording's start, with independently normalised heights. They show duration, pauses and loudness patterns, not pronunciation accuracy. Original playback uses the selected speed and audio timing offset; user recordings play at recorded speed.
+Open **Compare** at any time to see the reference and latest take. The previous take is expandable. Playing either track stops the other. Waveforms share a time scale beginning at each recording's start, with independently normalised heights. They show duration, pauses and loudness patterns. Reference playback uses the selected speed and audio timing offset, and user recordings play at recorded speed.
 
 ## Retention and privacy
 
@@ -24,7 +24,7 @@ YouTube-only lessons do not expose their audio for analysis and retain their exi
 
 ## Validation
 
-Unit tests cover waveform silence preservation, normalisation, attempt rotation, edited-source detection, delayed-permission cancellation, unsupported microphones and entry-position restoration. Browser checks use an encoded MP3 lesson and Chromium's simulated microphone to exercise listen/record/stop, closed comparison, two attempts, waveforms, explicit playback, local saving and saved-attempt refresh. Responsive checks cover 320/375/430px phones, tablet, desktop and short landscape. Physical microphones, iOS codecs and real-device interruption behaviour still need device testing.
+Unit tests cover waveform silence preservation, normalisation, attempt rotation, edited-source detection, delayed-permission cancellation, unsupported microphones and entry-position restoration. Browser fixtures use generated native audio and simulated microphone input. Physical microphones, iOS codecs and real-device interruption behaviour need separate device testing.
 
 ## Main transport after engine recovery
 

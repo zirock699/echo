@@ -8,7 +8,7 @@ import {homeShelves,shelfArtworkLessons} from './home.mjs';
 import {updateShelfControls,scrollShelf} from './shelf-navigation.mjs';
 import {syncIssueKey,syncNoticeHTML,syncProblem,syncSaveMessage} from './sync-notice.mjs';
 import {MAX_BACKUP_BYTES} from './sync-limits.mjs';
-import {categoryValues,courseProgress,progressLabel,progressIndicator} from './courses.mjs';
+import {categoryValues,courseProgress,progressIndicator} from './courses.mjs';
 import {isManagedMediaPath,mediaReferences,removeLesson,queueUnreferencedMedia} from './library-mutations.mjs';
 import {EchoMirror} from './mirror.mjs';
 import {LibraryUI} from './library-ui.mjs';
@@ -20,15 +20,16 @@ import {PlayerEngine,usesUploadedAudio} from './player.mjs';
 import {transportState,swipeDirection,dismissCompactSwipe} from './practice.mjs';
 import {applyAmbient,artworkURL,prepareAmbient} from './ambient.mjs';
 import {playbackFeedback} from './player-layout.mjs';
-import {practiceCue,PracticeCueRegion} from './practice-cue.mjs';
+import {practiceCue,practiceDrills,PracticeCueRegion} from './practice-cue.mjs';
+import {renderRehearse,renderJournal,renderDrills} from './rehearsal-ui.mjs';
 const store=new Store(),player=new PlayerEngine(),lyrics=new LyricsScroller();
-const freshUI=()=>({started:false,allowedVideo:null,compactDismissed:false,preparing:false,uploading:false,uploadError:'',queueWasPlaying:false,view:'home',search:'',libraryFilter:'all',sort:'recent',collectionId:null,modal:null,optionsTab:'playback',practicePromptDraft:null,deviceDraftTask:null,deviceDraftError:"",recordingOpen:false,queue:false,queuePage:null,queueMenu:null,homeCategory:'',syncDismissed:null,syncRetrying:false,word:null,import:{url:'',title:'',speaker:'',text:'',fileName:'',offset:0,grouping:'original',preview:null,errors:[],warnings:[],format:''},pendingSummary:null});
+const freshUI=()=>({started:false,allowedVideo:null,compactDismissed:false,preparing:false,uploading:false,uploadError:'',queueWasPlaying:false,view:'home',search:'',libraryFilter:'all',sort:'recent',collectionId:null,modal:null,optionsTab:'playback',practicePromptDraft:null,deviceDraftTask:null,deviceDraftError:"",recordingOpen:false,queue:false,queuePage:null,queueMenu:null,homeCategory:'',homeBrowseOpen:false,journalFocus:null,syncDismissed:null,syncRetrying:false,word:null,import:{url:'',title:'',speaker:'',text:'',fileName:'',offset:0,grouping:'original',preview:null,errors:[],warnings:[],format:''},pendingSummary:null});
 const ui=freshUI();
 const activePrompt=()=>practiceCue(ui.modal);
 const root=document.querySelector('#app'),dock=document.querySelector('#youtube-dock'),toaster=document.querySelector('#toast');
 const focus=new RenderFocus(root);
 root.addEventListener('click',e=>focus.rememberInvoker(e.target.closest('[data-action],[data-lx],[data-cx],[data-sx]')),{capture:true});
-const libraryUI=new LibraryUI(store,()=>render(),id=>openLesson(id));libraryUI.bind(root);libraryUI.onLegacy=()=>action('youtube-add',{},{});libraryUI.onLibrary=()=>{ui.view='library';ui.collectionId=null;};libraryUI.onSettings=()=>{ui.view='settings';render();};libraryUI.onAssetsChanged=id=>{const l=store.data.lessons.find(l=>l.id===id);if(l)reloadSource(l);};
+const libraryUI=new LibraryUI(store,()=>render(),id=>openLesson(id));libraryUI.bind(root);libraryUI.onLegacy=()=>action('youtube-add',{},{});libraryUI.onLibrary=()=>{ui.view='library';ui.collectionId=null;};libraryUI.onAssetsChanged=id=>{const l=store.data.lessons.find(l=>l.id===id);if(l)reloadSource(l);};
 const searchUI=new SearchUI(store,()=>render(),{lesson:id=>openLesson(id),course:id=>action('home-course',{id},{}),collection:id=>collectionsUI.action('open',{id})});searchUI.bind(root);searchUI.onResults=()=>{watchMore();navigation.commit(captureRoute());};
 const collectionsUI=new CollectionsUI(store,()=>render(),id=>openLesson(id));collectionsUI.bind(root);collectionsUI.onView=()=>{ui.view='collections';ui.collectionId=null;};
 const recorder=new PracticeRecorder(()=>render());
@@ -36,15 +37,17 @@ const mirror=new EchoMirror({notify:()=>render(),tick:()=>mirrorTick(),pause:()=
 const mobileLayout=()=>matchMedia('(max-width:760px), (max-width:1024px) and (max-height:520px) and (pointer:coarse)').matches;
 const navigation=new ScreenHistory({restore:restoreRoute});
 function captureRoute(){
- const modal=ui.modal?Object.fromEntries(Object.entries(ui.modal).filter(([key])=>!['preview','remap'].includes(key))):null;
+ const modal=ui.modal?.type==='summary'?{type:'summary',sessionId:ui.modal.session.id}:
+  ui.modal?Object.fromEntries(Object.entries(ui.modal).filter(([key])=>!['preview','remap'].includes(key))):null;
  return {
-  owner:store.owner,view:ui.view,lessonId:current()?.id||null,modal,optionsTab:ui.optionsTab,queue:ui.queue,
+  owner:store.owner,view:ui.view,lessonId:current()?.id||null,modal,optionsTab:ui.optionsTab,queue:ui.queue,homeBrowseOpen:ui.homeBrowseOpen,
+  journalFocus:ui.view==='journal'?ui.journalFocus:null,
   search:{query:searchUI.query,kind:searchUI.kind,limit:searchUI.limit},
   library:{state:{...libraryUI.state},kind:libraryUI.kind,page:libraryUI.page,searchOpen:libraryUI.searchOpen,dialog:libraryUI.dialog},
   collections:{id:collectionsUI.id,query:collectionsUI.query,lessonQuery:collectionsUI.lessonQuery,page:collectionsUI.page,lessonPage:collectionsUI.lessonPage,dialog:collectionsUI.dialog,draftId:collectionsUI.draft.id},
   mirrorPanel:mirror.panelOpen,
   overlay:!!(ui.modal||libraryUI.dialog||collectionsUI.dialog||mirror.panelOpen||ui.view==='player'&&ui.queue&&mobileLayout()),
-  nestedOverlay:modal?.type==='transfer-prompt'&&modal.from!=='player',transient:!!activePrompt()
+  nestedOverlay:modal?.type==='drill-prompt'||modal?.type==='transfer-prompt'&&modal.from!=='player',transient:!!activePrompt()
  };
 }
 function restoreRoute(route){
@@ -53,11 +56,20 @@ function restoreRoute(route){
    render();return;
  }
  const returningToPractice=ui.modal?.type==='transfer-prompt'&&route.modal?.type==='player-settings';
+ const returningDrill=ui.modal?.type==='drill-prompt'&&route.modal?.type==='drills'?ui.modal.from:null;
  if(ui.view==='player'&&route.view!=='player')saveProgress();
  const resumeQueue=!activePrompt()&&!route.transient&&ui.queue&&mobileLayout()&&!route.queue&&ui.queueWasPlaying;
  mirror.exit();recorder.stop();
- ui.view=['home','library','collections','settings','player','search'].includes(route.view)?route.view:'home';
+ ui.view=['home','library','collections','settings','player','search','journal'].includes(route.view)?route.view:'home';
  ui.collectionId=null;ui.modal=route.modal||null;ui.optionsTab=route.optionsTab||'playback';ui.queue=!!route.queue&&ui.view==='player';
+ ui.homeBrowseOpen=!!route.homeBrowseOpen;
+ ui.journalFocus=route.journalFocus??null;
+ if(ui.modal?.type==='history'){ui.view='journal';ui.modal=null;}
+ if(ui.modal?.type==='summary'){
+  const sessionId=ui.modal.sessionId??ui.modal.session?.id;
+  const session=sessionId&&store.data.sessions.find(entry=>entry.id===sessionId);
+  ui.modal=session?{type:'summary',session}:null;
+ }
  if(route.search)Object.assign(searchUI,route.search);
  if(route.library){Object.assign(libraryUI.state,route.library.state);Object.assign(libraryUI,{kind:route.library.kind,page:route.library.page||1,searchOpen:!!route.library.searchOpen,dialog:route.library.dialog||''});}
  const collection=route.collections;if(collection){Object.assign(collectionsUI,{id:collection.id,query:collection.query||'',lessonQuery:collection.lessonQuery||'',page:collection.page||1,lessonPage:collection.lessonPage||1,dialog:collection.dialog||''});if(collectionsUI.dialog==='edit'){const c=store.data.collections.find(c=>c.id===collection.draftId);if(c)collectionsUI.draft={id:c.id,name:c.name};else collectionsUI.dialog='';}if(collectionsUI.dialog==='pick'&&!collectionsUI.collection)collectionsUI.dialog='';}
@@ -71,6 +83,11 @@ function restoreRoute(route){
    trigger?.focus({preventScroll:true});
    trigger?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
  }
+ if(returningDrill&&Object.hasOwn(practiceDrills,returningDrill))root.querySelector(`[data-action="start-drill"][data-id="${returningDrill}"]`)?.focus();
+ if(ui.view==='journal'&&ui.journalFocus){
+   const opener=document.getElementById(ui.journalFocus.id);
+   if(opener?.matches('[data-action="journal-resume"]')&&opener.dataset.id===ui.journalFocus.lessonId)opener.focus({preventScroll:true});
+ }
  if(resumeQueue)player.play();
  requestAnimationFrame(()=>window.scrollTo(0,route.scroll||0));
 }
@@ -78,9 +95,13 @@ addEventListener('popstate',event=>navigation.pop(event.state));
 addEventListener('click',()=>navigation.rememberScroll(scrollY),{capture:true});
 addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key))navigation.rememberScroll(scrollY);},{capture:true});
 function ensureMirror(){mirror.enter(current(),player.current(),player.time,player.speed);}
-function mirrorTick(){const el=document.getElementById('mirror-status');if(el)el.textContent=mirror.phase==='recording'?`Recording ${fmtTime(mirror.elapsed||0)} — tap Stop`:mirror.error||mirror.message;const track=document.getElementById('mirror-track-status');if(mirror.playing==='original')updateTimeline();if(track&&mirror.playing)track.textContent=`Playing ${mirror.playing==='original'?'original':'your attempt'} · ${fmtTime(mirror.elapsed||0)}`;}
+function mirrorTick(){const el=document.getElementById('mirror-status');if(el)el.textContent=mirror.phase==='recording'?`Recording ${fmtTime(mirror.elapsed||0)} — tap Stop`:mirror.error||mirror.message;const track=document.getElementById('mirror-track-status');if(mirror.playing==='original')updateTimeline();if(track&&mirror.playing)track.textContent=`Playing ${mirror.playing==='original'?'reference':'your take'} · ${fmtTime(mirror.elapsed||0)}`;}
 
 const SVG={wave:'<path d="M3 10v4M7 6v12M12 3v18M17 6v12M21 10v4"/>',expand:'<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>',sliders:'<path d="M3 6h4m4 0h10M3 12h10m4 0h4M3 18h4m4 0h10"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="18" r="2"/>',home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',library:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/>',plus:'<path d="M12 5v14M5 12h14"/>',search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',heart:'<path d="M20.8 8.6c0 4.2-8.8 10.8-8.8 10.8S3.2 12.8 3.2 8.6a4.7 4.7 0 0 1 8.8-2.3 4.7 4.7 0 0 1 8.8 2.3z"/>',list:'<path d="M4 6h16M4 12h16M4 18h16"/>',settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',chevron:'<path d="m15 18-6-6 6-6"/>',close:'<path d="M18 6 6 18M6 6l12 12"/>',play:'<path d="m8 5 12 7-12 7z"/>',pause:'<path d="M8 5v14M16 5v14"/>',back:'<path d="m18 6-9 6 9 6V6zM6 6v12"/>',next:'<path d="m6 6 9 6-9 6V6zM18 6v12"/>',replay:'<path d="M3 11a9 9 0 1 1 2.3 6M3 4v7h7"/>',loop:'<path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/>',eye:'<path d="M2 12S6 5 12 5s10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',eyeoff:'<path d="m3 3 18 18M10.6 5.1A9 9 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.3 4.2M6.2 6.6A17 17 0 0 0 2 12s4 7 10 7a9 9 0 0 0 4-.9"/>',check:'<path d="m5 12 4 4L19 6"/>',flag:'<path d="M5 22V4m0 0c5-4 9 4 15 0v12c-6 4-10-4-15 0"/>',more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',music:'<path d="M9 18V5l12-3v13"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="18" cy="15" rx="3" ry="2"/>',folder:'<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',upload:'<path d="m12 16 0-13m-5 5 5-5 5 5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/>',download:'<path d="M12 3v13m-5-5 5 5 5-5M4 18v3h16v-3"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 1v2m0 18v2M1 12h2m18 0h2M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2"/>',moon:'<path d="M20 15A8 8 0 0 1 9 4 8 8 0 1 0 20 15"/>',spark:'<path d="m12 2 2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z"/>',edit:'<path d="m4 16 11-11 4 4-11 11-5 1zM13 7l4 4"/>',trash:'<path d="M4 7h16M10 3h4M6 7l1 14h10l1-14"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/>',keyboard:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h1m3 0h1m3 0h1m3 0h1M7 15h10"/>',volume:'<path d="M11 5 6 9H3v6h3l5 4zM15 9a4 4 0 0 1 0 6M18 5a9 9 0 0 1 0 14"/>',chevrondown:'<path d="m6 9 6 6 6-6"/>'};
+Object.assign(SVG,{
+ mic:'<rect x="8" y="2" width="8" height="13" rx="4"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/>',
+ stop:'<rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor" stroke="none"/>'
+});
 const ico=(name,cls='')=>name==='settings'?uiIcon('settings'):`<svg class="${cls}" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[name]||SVG.spark}</svg>`;
 const esc=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const cueRegion=new PracticeCueRegion(root,ico('close'));
@@ -107,8 +128,33 @@ function settingsSync(){
   ?' <button id="settings-device-drafts" class="text-link" data-action="device-drafts">Review device copies</button>':'';
  return `<span class="micro">${esc(message)}${action}${copies}</span>`;
 }
-function navitem(view,label,icon){return `<button data-action="view" data-view="${view}" ${ui.view===view?'aria-current="page"':''} class="navitem ${ui.view===view?'active':''}">${ico(icon)}${label}</button>`;}
-function shell(content){const active=current();return `<div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-icon">${ico('replay')}</span>Echo Studio</div>${navitem('home','Home','home')}${navitem('library','My Library','library')}${navitem('collections','Collections','folder')}${navitem('search','Search','search')}${navitem('settings','Settings','settings')}<div class="sidebar-bottom"><button class="btn primary" style="width:100%" data-action="open-add">${ico('plus')} Add lessons</button></div></aside><div class="page"><header class="topbar"><div class="brand-mobile" ><span class="brand-icon">${ico('replay')}</span>Echo Studio</div><div class="top-actions">${syncHTML()}<button class="icon-btn" data-action="settings-shortcut" title="Settings" aria-label="Settings">${ico('settings')}</button></div></header>${content}</div></div>${syncBanner()}<nav class="mobile-nav">${[['home','Home','home'],['library','Library','library'],['add','Add','plus'],['collections','Collections','folder'],['search','Search','search']].map(([v,l,i])=>`<button data-action="${v==='add'?'open-add':'view'}" ${v==='add'?'aria-label="Add lessons"':`data-view="${v}"`} ${(ui.view===v)?'aria-current="page"':''} class="${(ui.view===v)?'active':''}">${ico(i)}${l}</button>`).join('')}</nav>${active&&ui.started&&!ui.compactDismissed&&ui.view!=='player'?compact():''}${ui.queue&&active?queue():''}${ui.modal&&!activePrompt()?modal():''}${libraryUI.overlay()}${collectionsUI.overlay()}${mirror.panel()}`;}
+const libraryViews=['library','collections','search'];
+const primaryViews=[['home','Rehearse','home'],['library','Library','library'],['journal','Journal','clock']];
+function primaryNavigation(className){
+ return `<nav class="${className}" aria-label="Main navigation">${primaryViews.map(([view,label,icon])=>{
+  const selected=view===ui.view||view==='library'&&libraryViews.includes(ui.view);
+  return `<button type="button" data-action="view" data-view="${view}" ${selected?'aria-current="page" class="active"':''}>${ico(icon)}<span>${label}</span></button>`;
+ }).join('')}</nav>`;
+}
+function libraryNavigation(){
+ if(!libraryViews.includes(ui.view))return '';
+ const destinations=[['library','References','library'],['collections','Collections','folder'],['search','Search','search']];
+ return `<nav class="library-destinations" aria-label="Library navigation">${destinations.map(([view,label,icon])=>
+  `<button type="button" data-action="view" data-view="${view}" ${ui.view===view?'aria-current="page"':''}>${ico(icon)}<span>${label}</span></button>`
+ ).join('')}</nav>`;
+}
+function shell(content){
+ const active=current(),fullPlayer=ui.view==='player';
+ return `<div class="app-shell rehearsal-shell">
+  ${fullPlayer?'':`<header class="rehearsal-masthead"><div class="rehearsal-bar">
+   <button type="button" class="rehearsal-brand" data-action="view" data-view="home" aria-label="Echo Studio, Rehearse"><span>${ico('wave')}</span>Echo Studio</button>
+   ${primaryNavigation('rehearsal-nav')}
+   <div class="rehearsal-header-actions">${syncHTML()}<button id="rehearsal-add" class="text-link rehearsal-add" type="button" data-action="open-add" aria-label="Add lessons">${ico('plus')}<span>Add</span></button><button id="rehearsal-settings" class="icon-btn" type="button" data-action="settings-shortcut" aria-label="Settings" title="Settings">${ico('settings')}</button></div>
+  </div></header>`}
+  <div class="page rehearsal-content">${libraryNavigation()}${content}</div>
+ </div>${syncBanner()}${fullPlayer?'':primaryNavigation('mobile-nav')}
+ ${active&&ui.started&&!ui.compactDismissed&&!fullPlayer?compact():''}${ui.queue&&active?queue():''}${ui.modal&&!activePrompt()?modal():''}${libraryUI.overlay()}${collectionsUI.overlay()}${mirror.panel()}`;
+}
 function syncBanner(){return syncNoticeHTML(store,{dismissed:ui.syncDismissed,retrying:ui.syncRetrying});}
 function listeningDuration(seconds){const total=Math.max(0,Math.round(seconds||0)),minutes=Math.floor(total/60),rest=total%60;return minutes?`${minutes} min${rest?` ${rest} s`:''}`:`${rest} s`;}
 function lessonCard(l){const {value:pct,label}=progressIndicator(l),art=artworkURL(l);return `<article class="lesson-card"><button class="thumb" type="button" data-action="open-lesson" data-id="${attr(l.id)}" aria-label="Open ${attr(l.title)}">${art?`<img loading="lazy" src="${attr(art)}" alt="">`:ico('music')}<span class="card-play">${ico('play')}</span></button><div class="card-title" title="${attr(l.title)}">${esc(l.title)}</div><div class="card-sub">${esc(l.speaker||'YouTube recording')} · ${l.duration?fmtTime(l.duration):`${l.phrases.length} phrases`}</div><div class="card-bottom">${pct===null?'':`<div class="mini-progress" title="${attr(label)}"><i style="width:${pct}%"></i></div>`}<span class="micro">${esc(label)}</span><button class="icon-btn" data-action="lesson-actions" data-id="${attr(l.id)}" title="Manage lesson" aria-label="Manage lesson" style="width:27px;height:27px">${ico('more')}</button><button class="icon-btn" data-action="favourite" data-id="${attr(l.id)}" style="width:27px;height:27px;color:${l.favourite?'var(--accent)':'var(--muted)'}" title="${l.favourite?'Remove favourite':'Add favourite'}">${ico('heart')}</button></div></article>`;}
@@ -127,16 +173,27 @@ function shelfMoreCard(shelf){
  const lessons=shelfArtworkLessons(store.data,shelf),tiles=Array.from({length:4},(_,i)=>lessons.length?homeArtwork(lessons[i%lessons.length],'l'):homeArtwork({},'l')).join('');
  return `<article class="shelf-card shelf-more-card"><button class="shelf-open" data-action="home-see-all" data-shelf="${attr(shelf.id)}" aria-label="See all ${attr(shelf.title)}"><span class="shelf-mosaic" aria-hidden="true">${tiles}</span><strong>See all</strong><small>${shelf.total} ${shelf.destination.view==='collections'?(shelf.total===1?'collection':'collections'):shelf.destination.kind==='courses'?(shelf.total===1?'course':'courses'):(shelf.total===1?'item':'items')}</small></button></article>`;
 }
-function homePromptButton(primary=false){
- return `<button id="home-speaking-prompt" class="btn ${primary?'primary':'ghost'} home-prompt" type="button" aria-haspopup="dialog" data-action="home-speaking-prompt">Try a speaking prompt</button>`;
-}
 function home(){
- const data=store.data,lessons=data.lessons,resume=lessons.find(l=>l.id===data.lastLessonId)||[...lessons].sort((a,b)=>(b.importedAt||b.createdAt)-(a.importedAt||a.createdAt))[0];
- const shelves=homeShelves(data);libraryUI.lessonIndex=new Map(lessons.map(l=>[l.id,l]));
- return `<main class="home-screen"><header class="home-appbar"><h1>Home</h1><div class="library-app-actions"><button class="icon-btn" data-action="library-search" aria-label="Search">${ico('search')}</button><button class="icon-btn" data-action="settings-shortcut" aria-label="Settings">${ico('settings')}</button></div></header>
- ${resume?`<div class="home-start"><button class="home-resume" data-action="open-lesson" data-id="${attr(resume.id)}" aria-label="Resume lesson">${homeArtwork(resume,'l')}<span class="home-resume-copy"><small>Continue practising</small><strong>${esc(resume.title)}</strong><small>${esc(progressLabel(resume))}</small></span><span class="home-resume-play" aria-hidden="true">${ico('play')}</span></button>${homePromptButton()}</div>`:`<div class="home-start home-start-empty"><section class="home-quick-practice"><h2>Speak from a situation</h2>${homePromptButton(true)}</section><section class="first-lesson"><h2>Add your first lesson</h2><p class="muted">Import a ZIP, or add a recording and transcript.</p><button class="btn ghost" data-action="open-add">${ico('plus')} Add lessons</button></section></div>`}
- ${shelves.map(shelf=>`<section class="home-shelf ${shelf.items.length<=2?'shelf-compact':''}" aria-labelledby="shelf-${attr(shelf.id)}"><header><h2 id="shelf-${attr(shelf.id)}">${esc(shelf.title)}</h2><div class="shelf-heading-actions">${shelf.hasMore?`<button id="home-more-${attr(shelf.id)}" class="text-link" data-action="home-see-all" data-shelf="${attr(shelf.id)}" aria-label="See all ${attr(shelf.title)}">See all</button>`:''}<div class="shelf-scroll-controls" data-shelf-scroll-controls hidden><button class="icon-btn" data-action="shelf-scroll" data-shelf="${attr(shelf.id)}" data-direction="left" aria-label="Scroll ${attr(shelf.title)} left" aria-controls="home-track-${attr(shelf.id)}">${ico('chevron')}</button><button class="icon-btn" data-action="shelf-scroll" data-shelf="${attr(shelf.id)}" data-direction="right" aria-label="Scroll ${attr(shelf.title)} right" aria-controls="home-track-${attr(shelf.id)}">${ico('chevron','shelf-next')}</button></div></div></header><div id="home-track-${attr(shelf.id)}" class="shelf-track" data-scroll-key="shelf-${attr(shelf.id)}" role="region" aria-label="${attr(shelf.title)}" tabindex="0">${shelf.items.map(entry=>homeShelfCard(entry,shelf.id)).join('')}${shelf.hasMore?shelfMoreCard(shelf):''}</div></section>`).join('')}
- <button id="home-manage-categories" class="text-link home-manage-categories" data-action="home-categories">Manage categories</button></main>`;
+ const data=store.data;
+ let browseHTML='';
+ if(ui.homeBrowseOpen){
+  const shelves=homeShelves(data);
+  libraryUI.lessonIndex=new Map(data.lessons.map(lesson=>[lesson.id,lesson]));
+  browseHTML=`${shelves.map(shelf=>`<section class="home-shelf ${shelf.items.length<=2?'shelf-compact':''}" aria-labelledby="shelf-${attr(shelf.id)}"><header><h2 id="shelf-${attr(shelf.id)}">${esc(shelf.title)}</h2><div class="shelf-heading-actions">${shelf.hasMore?`<button id="home-more-${attr(shelf.id)}" class="text-link" data-action="home-see-all" data-shelf="${attr(shelf.id)}" aria-label="See all ${attr(shelf.title)}">See all</button>`:''}<div class="shelf-scroll-controls" data-shelf-scroll-controls hidden><button class="icon-btn" data-action="shelf-scroll" data-shelf="${attr(shelf.id)}" data-direction="left" aria-label="Scroll ${attr(shelf.title)} left" aria-controls="home-track-${attr(shelf.id)}">${ico('chevron')}</button><button class="icon-btn" data-action="shelf-scroll" data-shelf="${attr(shelf.id)}" data-direction="right" aria-label="Scroll ${attr(shelf.title)} right" aria-controls="home-track-${attr(shelf.id)}">${ico('chevron','shelf-next')}</button></div></div></header><div id="home-track-${attr(shelf.id)}" class="shelf-track" data-scroll-key="shelf-${attr(shelf.id)}" role="region" aria-label="${attr(shelf.title)}" tabindex="0">${shelf.items.map(entry=>homeShelfCard(entry,shelf.id)).join('')}${shelf.hasMore?shelfMoreCard(shelf):''}</div></section>`).join('')}`;
+ }
+ return renderRehearse({data,icon:ico,escape:esc,lessonArtwork:lesson=>homeArtwork(lesson,'l'),
+  browseHTML,browseOpen:ui.homeBrowseOpen});
+}
+function viewContent(){
+ switch(ui.view){
+  case 'library':return library();
+  case 'collections':return collections();
+  case 'settings':return settings();
+  case 'search':return searchUI.view();
+  case 'journal':return renderJournal({data:store.data,icon:ico,escape:esc});
+  case 'player':return playerView();
+  default:return home();
+ }
 }
 function library(){return ui.collectionId?legacyLibrary():libraryUI.view();}
 function legacyLibrary(){let list=[...store.data.lessons].filter(l=>`${l.title} ${l.speaker||''}`.toLowerCase().includes(ui.search.toLowerCase()));if(ui.libraryFilter==='favourites')list=list.filter(l=>l.favourite);if(ui.collectionId)list=list.filter(l=>store.data.collections.find(c=>c.id===ui.collectionId)?.lessonIds.includes(l.id));list.sort((a,b)=>ui.sort==='title'?a.title.localeCompare(b.title):b.createdAt-a.createdAt);return `<div class="section-header" style="margin-top:0"><div><h1 class="heading">My library</h1><p class="muted" style="margin:0">${store.data.lessons.length} lesson${store.data.lessons.length===1?'':'s'} in your personal collection</p></div><button class="btn primary" data-action="open-add">${ico('plus')} <span>Add lesson</span></button></div><div class="toolbar"><div class="search-field">${ico('search')}<input id="library-search" placeholder="Search lessons or speakers" value="${attr(ui.search)}" aria-label="Search lessons"></div><select id="library-filter" aria-label="Library filter"><option value="all" ${ui.libraryFilter==='all'?'selected':''}>All lessons</option><option value="favourites" ${ui.libraryFilter==='favourites'?'selected':''}>Favourites</option></select><select id="library-sort" aria-label="Sort lessons"><option value="recent" ${ui.sort==='recent'?'selected':''}>Recently added</option><option value="title" ${ui.sort==='title'?'selected':''}>Title A–Z</option></select></div>${list.length?`<div class="lesson-grid">${list.map(lessonCard).join('')}</div>${ui.collectionId?`<button class="text-link" data-action="clear-collection">Show all lessons</button>`:''}`:empty('Nothing here yet',ui.search?'Try a different search.':ui.libraryFilter==='favourites'?'Mark a lesson as a favourite to see it here.':'Add a lesson to start building your library.',!store.data.lessons.length)}`;}
@@ -187,13 +244,16 @@ function playerView(){
  const provider=!activePrompt()&&videoAllowed(l);
  const cover=artworkURL(l,{allowYouTube:provider,large:true}),sourceArt=artworkURL(l,{allowYouTube:provider});
  const feedback=playbackFeedback(needsVideo?'idle':player.state,audio),transfer=canTransferFromPlayer(p);
- const last=player.eligible().at(-1)?.id===p?.id,index=l.phrases.findIndex(q=>q.id===p?.id)+1,duration=p?p.end-p.start:player.duration||l.duration||0;
+ const last=player.eligible().at(-1)?.id===p?.id,duration=p?p.end-p.start:player.duration||l.duration||0;
+ const recording=mirror.phase==='recording';
+ const recordLabel=recording?'Stop and listen back':mirror.busy?'Cancel recording cycle':'Listen then record';
+ const recordSymbol=ico(recording?'stop':mirror.busy?'close':'mic');
  return `<main class="player-page immersive-player ${audio?'audio-only':''} ${mirrorAvailable?'mirror-enabled':''}" data-ambient-source="${attr(l.ambientPalette?.source||'preparing')}" aria-label="Practice player">${cover?`<img class="player-artwork" src="${attr(cover)}" alt="">`:''}
  <header class="player-top"><button class="icon-btn player-back" data-action="back" aria-label="Back" title="Back">${ico('chevrondown')}</button><div class="player-title">${sourceArt?`<img class="player-source-art" src="${attr(sourceArt)}" alt="" width="40" height="40">`:`<span class="player-source-art shelf-art" aria-hidden="true">${ico('music')}</span>`}<span class="player-title-copy"><strong title="${attr(l.title)}">${esc(l.title)}</strong>${l.channel||l.speaker?`<small>${esc(l.channel||l.speaker)}</small>`:''}</span></div><div class="session-actions"><button id="player-options-toggle" class="icon-btn" data-action="player-settings" aria-label="Player settings" title="Player settings">${ico('settings')}</button></div></header>
  <div class="player-content">
  <div class="practice-body">
  <div class="transcript-area">
- <div class="player-feedback-row${transfer?' has-transfer':''}">${transfer?'<button id="player-transfer-prompt" class="player-transfer-prompt text-link" type="button" data-action="practice-transfer-prompt" data-from="player" aria-haspopup="dialog">Try a new conversation</button>':''}<div class="playback-notice ${feedback.visible?'':'sr-only'}" role="status" aria-live="polite">${feedback.visible?`<button data-action="playback-details">${esc(feedback.label)}</button>`:esc(feedback.label)}</div></div>
+ <div class="player-feedback-row"><div class="playback-notice ${feedback.visible?'':'sr-only'}" role="status" aria-live="polite">${feedback.visible?`<button data-action="playback-details">${esc(feedback.label)}</button>`:esc(feedback.label)}</div></div>
  <section class="phrase-panel" aria-label="Transcript">${pref().showText&&p?'<div id="lyrics-viewport" class="lyrics-viewport" tabindex="0" aria-label="Scroll transcript and choose a phrase"></div><button class="lyrics-follow" data-action="lyrics-follow" hidden>Current phrase</button>':`<div class="phrase-text" id="active-phrase">${phraseWords(p)}</div>`}</section></div>
  ${audio?'':`<section class="media-info" aria-label="YouTube recording"><div class="video-slot" id="video-slot">${needsVideo?'<button class="btn ghost" data-action="load-youtube">Load YouTube video</button>':''}</div></section>`}
  </div>
@@ -201,7 +261,15 @@ function playerView(){
  <footer class="practice-footer">
  <div class="player-utility-row"><div class="phrase-timeline"><input id="phrase-seek" type="range" min="0" max="${Math.max(.01,duration)}" step="0.01" value="0" aria-label="Seek within phrase" ${disabled||!p?'disabled':''}><span id="phrase-clock" aria-hidden="true">0:00 / ${fmtTime(duration)}</span></div><nav class="player-tools" aria-label="Practice tools"><button class="icon-btn" data-action="seek-tools" aria-label="Recording timeline" title="Recording timeline">${ico('clock')}</button><button id="phrase-queue-toggle" class="icon-btn" data-action="queue" aria-label="Phrase queue" title="Phrase queue" aria-expanded="${ui.queue}">${ico('list')}</button>${mirrorAvailable?`<button id="mirror-compare" class="icon-btn" data-action="mirror-panel" aria-label="Compare recordings" title="Compare recordings" aria-expanded="${mirror.panelOpen}" ${mirror.busy?'disabled':''}>${uiIcon('compare')}</button>`:''}<button class="icon-btn player-fullscreen" data-action="fullscreen" aria-label="Toggle fullscreen" title="Fullscreen">${ico('expand')}</button></nav></div>
 
- <div class="practice-actions"><button class="reset-phrase" data-action="reset-phrase" aria-label="Restart current phrase" title="Replay current phrase" ${disabled||!p?'disabled':''}>${ico('replay')}</button>${mirrorAvailable?`<div class="mirror-split" role="group" aria-label="Play and record"><button id="mirror-main-play" class="mirror-main-play" data-action="${transport.action}" aria-label="${transport.label}" ${disabled||mirror.busy?'disabled':''}>${ico(transport.icon)}<span>${transport.label}</span></button><button id="mirror-main-record" class="mirror-main-record ${mirror.phase==='recording'?'is-recording':''}" data-action="mirror-record" aria-label="${mirror.phase==='recording'?'Stop recording':mirror.busy?'Cancel recording cycle':'Listen then record'}" ${disabled||mirror.phase==='finishing'?'disabled':''}>${mirror.phase==='recording'?'<span aria-hidden="true">■</span>':mirror.busy?'<span aria-hidden="true">×</span>':'<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="2" width="8" height="13" rx="4"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg>'}<span>${mirror.phase==='recording'?'Stop':mirror.busy?'Cancel':'Record'}</span></button></div>`:`<button class="practice-primary ${feedback.busy?'is-waiting':''}" aria-busy="${feedback.busy}" data-action="${transport.action}" aria-label="${transport.label}" title="${transport.label}" ${disabled?'disabled':''}>${ico(transport.icon)}</button>`}<button class="practice-next ${player.phraseDone?'earned':''}" data-action="next" aria-label="${last?'Finish practice':'Next phrase'}" title="${last?'Finish practice':'Practised, next phrase'}" ${disabled||!p?'disabled':''}>${ico(last?'check':'next')}</button></div>
+ <div class="practice-actions" role="group" aria-label="Playback controls">
+  <button class="reset-phrase" data-action="reset-phrase" aria-label="Replay current phrase" title="Replay current phrase" ${disabled||!p?'disabled':''}>${ico('replay')}<span>Replay</span></button>
+  <button id="mirror-main-play" class="practice-primary ${feedback.busy?'is-waiting':''}" aria-busy="${feedback.busy}" data-action="${transport.action}" aria-label="${transport.label}" title="${transport.label}" ${disabled||mirror.busy?'disabled':''}>${ico(transport.icon)}<span>${transport.label}</span></button>
+  <button class="practice-next ${player.phraseDone?'earned':''}" data-action="next" aria-label="${last?'Finish practice':'Next phrase'}" title="${last?'Finish practice':'Practised, next phrase'}" ${disabled||!p?'disabled':''}>${ico(last?'check':'next')}<span>${last?'Finish':'Next'}</span></button>
+ </div>
+ ${p?`<div class="practice-footnote">
+  ${mirrorAvailable?`<button id="mirror-main-record" class="mirror-main-record ${recording?'is-recording':''}" data-action="mirror-record" aria-label="${recordLabel}" ${disabled||mirror.phase==='finishing'?'disabled':''}>${recordSymbol}<span>${recording?'Stop':mirror.busy?'Cancel':'Record'}</span></button>`:''}
+  ${transfer?`<button id="player-transfer-prompt" class="player-transfer-prompt text-link" type="button" data-action="practice-transfer-prompt" data-from="player" aria-haspopup="dialog">Try a new conversation</button>`:''}
+ </div>`:''}
  </footer></div>
 
  </main>`;
@@ -343,9 +411,19 @@ function modal(){const m=ui.modal;let content='',title='',large=false;
  } else if(m.type==='ipa'){
    title='Correct British IPA';const l=current();content=`<div class="form-group"><label>Word</label><input value="${attr(m.word)}" readonly></div><div class="form-group"><label>Broad British IPA</label><input id="ipa-value" value="${attr(lookupIPA(m.word,l.ipaOverrides)||'')}" placeholder="e.g. /əˈbaʊt/"></div><div class="tip">Overrides are saved with this lesson. This is pronunciation guidance, not an exact analysis of the video's speaker.</div><div class="modal-footer"><button class="btn ghost" data-action="modal-close">Cancel</button><button class="btn primary" data-action="save-ipa">Save correction</button></div>`;
  } else if(m.type==='summary'){
-   title='Session complete';const s=m.session;content=`<p class="muted">A little practice, repeated often, makes the difference.</p><div class="summary-stat"><div><strong>${s.coveredIds.length}</strong><small>Phrases heard</small></div><div><strong>${listeningDuration(s.activeSeconds)}</strong><small>Active listening</small></div><div><strong>${s.practised}</strong><small>Marked practised</small></div><div><strong>${s.difficult}</strong><small>Marked difficult</small></div></div><div class="modal-footer"><button class="btn ghost" data-action="summary-library">Library</button><button class="btn" data-action="summary-restart">Restart</button><button class="btn primary" data-action="summary-difficult">Review difficult</button></div>`;
- } else if(m.type==='history'){
-   title='Practice history';content=`${store.data.sessions.length?`<div class="preview-list" style="max-height:400px">${store.data.sessions.slice(0,100).map(s=>{const lesson=store.data.lessons.find(l=>l.id===s.lessonId);return `<div class="preview-row"><span style="flex:1"><strong>${esc(lesson?.title||'Deleted lesson')}</strong><div class="micro">${new Date(s.finishedAt||s.startedAt).toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})} · ${esc(s.mode)} · ${listeningDuration(s.activeSeconds)} listening</div></span><span class="micro">${s.metricsVersion===1?`${s.coveredIds.length} phrases heard`:'Earlier record'}</span></div>`;}).join('')}</div>`:'<div class="tip">No completed sessions yet. Use Finish session after practising to save a session.</div>'}<div class="modal-footer"><button class="btn" data-action="modal-close">Close</button></div>`;
+   title='Session complete';
+   const saved=store.data.sessions.find(session=>session.id===m.session.id);
+   const s=saved||m.session;
+   const note=saved?`<details class="option-group" id="journal-note-section"><summary>Note for next time</summary><div class="form-group">
+    <label for="journal-note">What would you like to try again?</label>
+    <textarea id="journal-note" maxlength="240" rows="2" aria-describedby="journal-note-help">${esc(typeof s.journalNote==='string'?s.journalNote:'')}</textarea>
+    <small id="journal-note-help" class="muted">Saving keeps this note with the session in your account.</small>
+    <button class="btn ghost" type="button" data-action="save-journal-note">Save note</button>
+   </div></details>`:'';
+   content=`<div class="summary-stat"><div><strong>${s.coveredIds.length}</strong><small>Phrases heard</small></div><div><strong>${listeningDuration(s.activeSeconds)}</strong><small>Active listening</small></div><div><strong>${s.practised}</strong><small>Marked practised</small></div><div><strong>${s.difficult}</strong><small>Marked difficult</small></div></div>${note}
+    <div class="modal-footer"><button class="btn ghost" data-action="summary-library">Library</button><button class="btn ghost" data-action="summary-restart">Restart</button><button class="btn ghost" data-action="summary-difficult">Review difficult</button><button class="btn primary" data-action="summary-journal">View Journal</button></div>`;
+ } else if(m.type==='drills'){
+   title='Choose a focus';content=renderDrills({icon:ico,escape:esc,activities:Object.values(practiceDrills)});
  } else if(m.type==='playback-details'){
    title='Playback help';content=`<p class="muted">${esc(player.error||'Playback is not ready yet.')}</p><div class="modal-footer"><button class="btn ghost" data-action="modal-close">Close</button><button class="btn primary" data-action="retry-player">Retry playback</button></div>`;
  } else if(m.type==='device-drafts'){
@@ -388,13 +466,13 @@ function render({recenterQueue=false}={}){
   ui.practicePromptDraft=ui.modal?.type==='transfer-prompt'&&ui.modal.from!=='player'?{lessonId:current()?.id,fields:captureModalFields()}:null;
   if(prompt){
    ui.queueWasPlaying=false;
-   player.pauseForPrompt({save:prompt.kind==='home-prompt'});
+   player.pauseForPrompt({save:prompt.kind!=='transfer-prompt'});
   }else player.releasePrompt();
  }
  if(!store.owner){
   applyTheme();dock.className='youtube-dock dock-hidden';
   const checking=store.mode==='checking',focused=focus.capture();
-  cueRegion.render(`<main class="home-screen"><header class="home-appbar"><h1>Echo Studio</h1></header><section class="empty"><h2>${checking?'Connecting':'Library unavailable'}</h2><p role="status">${checking?'Checking your account…':'Connect and sign in to load your private library.'}</p><div class="home-start">${checking?'':'<button class="btn primary" data-action="retry-sync">Retry</button>'}${homePromptButton()}</div></section></main>`,prompt);
+  cueRegion.render(`<main class="home-screen rehearsal-locked"><header class="home-appbar"><h1>Echo Studio</h1></header><section class="empty"><h2>${checking?'Connecting':'Library unavailable'}</h2><p role="status">${checking?'Checking your account…':'Connect and sign in to load your private library.'}</p><div class="home-start"><button id="home-speaking-prompt" class="btn primary" type="button" data-action="home-speaking-prompt" aria-haspopup="dialog">Talk now</button>${checking?'':'<button class="btn ghost" data-action="retry-sync">Retry</button>'}</div></section></main>`,prompt);
   isolateSpeakingPrompt(prompt);
   navigation.commit(captureRoute());
   focus.restore(focused);return;
@@ -408,7 +486,20 @@ function render({recenterQueue=false}={}){
  const focused=focus.capture();
  const horizontalPositions=new Map([...root.querySelectorAll('[data-scroll-key]')].map(el=>[el.dataset.scrollKey,el.scrollLeft]));
  const formValues=practiceFields??(ui.modal&&!['add','replace'].includes(ui.modal.type)?captureModalFields():[]);
- applyTheme();document.body.classList.toggle('view-home',ui.view==='home');document.body.classList.toggle('view-collections',ui.view==='collections');document.body.classList.toggle('view-settings',ui.view==='settings');document.body.classList.toggle('view-search',ui.view==='search');document.body.classList.toggle('has-compact-audio',!!current()&&ui.started&&!ui.compactDismissed&&ui.view!=='player');document.body.classList.toggle('view-player',ui.view==='player');document.documentElement.classList.toggle('view-player',ui.view==='player');document.body.classList.toggle('queue-open',ui.queue&&ui.view==='player');applyAmbient(current());if(ui.view==='player'&&current())ensureAmbient(current());document.body.classList.toggle('view-library',ui.view==='library'&&!ui.collectionId);document.body.classList.toggle('imported-player',ui.view==='player'&&!!current()?.importedAt);cueRegion.render(shell(ui.view==='home'?home():ui.view==='library'?library():ui.view==='collections'?collections():ui.view==='settings'?settings():ui.view==='search'?searchUI.view():playerView()),prompt);dock.className=`youtube-dock ${videoAllowed(current())&&(ui.view==='player'||ui.started&&!ui.compactDismissed)?(ui.view==='player'?'':'dock-compact'):'dock-hidden'}`;const lyricsSlot=document.getElementById('lyrics-viewport');if(lyricsSlot)lyrics.mount(lyricsSlot,{lessonId:current().id,phrases:player.eligible(),currentId:player.current()?.id,activeHTML:phraseWords(player.current())});updateTimeline();layoutDock();schedulePlayerLayout();
+ const fullPlayer=ui.view==='player';
+ applyTheme();
+ for(const view of ['home','collections','settings','search','journal','player'])document.body.classList.toggle(`view-${view}`,ui.view===view);
+ document.body.classList.toggle('view-library',ui.view==='library'&&!ui.collectionId);
+ document.documentElement.classList.toggle('view-player',fullPlayer);
+ document.body.classList.toggle('queue-open',ui.queue&&fullPlayer);
+ document.body.classList.toggle('has-compact-audio',!!current()&&ui.started&&!ui.compactDismissed&&!fullPlayer);
+ applyAmbient(current());
+ if(fullPlayer&&current())ensureAmbient(current());
+ cueRegion.render(shell(viewContent()),prompt);
+ dock.className=`youtube-dock ${videoAllowed(current())&&(fullPlayer||ui.started&&!ui.compactDismissed)?(fullPlayer?'':'dock-compact'):'dock-hidden'}`;
+ const lyricsSlot=document.getElementById('lyrics-viewport');
+ if(lyricsSlot)lyrics.mount(lyricsSlot,{lessonId:current().id,phrases:player.eligible(),currentId:player.current()?.id,activeHTML:phraseWords(player.current())});
+ updateTimeline();layoutDock();schedulePlayerLayout();
  isolateSpeakingPrompt(prompt);
  const queueList=ui.queue&&root.querySelector('#queue-list');
  if(queueList){
@@ -478,6 +569,7 @@ function updateTimeline(){
 function openLesson(id,{completeImport=false,activateYouTube=true}={}){
  const lesson=store.data.lessons.find(l=>l.id===id);
  if(!lesson)return toast('Lesson not found');
+ const fromJournal=ui.view==='journal';
  ui.compactDismissed=false;mirror.exit();recorder.stop();ui.started=true;
  if(current()&&current().id!==id){
   saveProgress();
@@ -492,6 +584,8 @@ function openLesson(id,{completeImport=false,activateYouTube=true}={}){
  ui.view='player';
  if(completeImport)ui.modal=null;
  ui.queue=!mobileLayout()&&!!pref().queueOpen;ui.word=null;
+ // Journal is the return point even when it was opened from this player.
+ if(fromJournal)navigation.commit(captureRoute(),{keepPrevious:true});
  if(store.data.lastLessonId!==id)store.mutate(data=>{data.lastLessonId=id;});
  window.scrollTo(0,0);render();initialiseSource(lesson);
 }
@@ -727,6 +821,9 @@ function action(name,data,e){
  if(!store.owner&&!dismissDialog&&name!=='retry-sync'&&name!=='home-speaking-prompt')return;
  const l=current();if(mirror.active&&['toggle','next','prev','replay','reset-phrase','select-phrase','lyric-select','queue-replay','queue','player-settings','settings-shortcut','show-ipa','word','seek-tools','mode','record-practice','remove-audio'].includes(name))mirror.exit();switch(name){
  case 'home-speaking-prompt':if(ui.view==='home'&&!ui.modal&&!libraryUI.dialog&&!collectionsUI.dialog&&!mirror.panelOpen)openSpeakingPrompt('home-prompt');break;
+ case 'home-drills':if(ui.view==='home'&&!ui.modal){ui.modal={type:'drills'};render();}break;
+ case 'start-drill':if(ui.modal?.type==='drills'&&Object.hasOwn(practiceDrills,data.id))openSpeakingPrompt('drill-prompt',data.id);break;
+ case 'home-browse':ui.homeBrowseOpen=!ui.homeBrowseOpen;render();break;
  case 'practice-transfer-prompt': {
    if(ui.view!=='player'||recorder.requesting||recorder.recorder?.state==='recording')break;
    if(data.from==='player'&&!ui.modal&&!(ui.queue&&mobileLayout())&&canTransferFromPlayer()){
@@ -828,9 +925,28 @@ function action(name,data,e){
  case 'undo':{const revision=l?.revisions?.at(-1);if(!revision)return toast('Nothing to undo.');const position=player.time,wasPlaying=player.playing;store.mutate(()=>{l.revisions.pop();for(const field of ['phrases','statuses','grouping','segments','source','format','offset'])if(Object.hasOwn(revision,field))l[field]=revision[field];});player.seekRecording(position,wasPlaying);ui.queue=false;render();toast('Last structural edit undone.');break;}
  case 'session-finish':finishSession();break;
  case 'summary-library':closeModal();ui.view='library';render();break;
+ case 'summary-journal':
+ case 'history':ui.modal=null;ui.view='journal';render();window.scrollTo(0,0);break;
+ case 'save-journal-note':{
+   if(ui.modal?.type!=='summary')break;
+   const completed=store.data.sessions.find(session=>session.id===ui.modal.session.id);
+   if(!completed)break;
+   const note=(getVal('journal-note')||'').trim();
+   if(note.length>240)return toast('Use 240 characters or fewer for a Journal note.');
+   if(note!==(completed.journalNote||''))store.mutate(()=>{if(note)completed.journalNote=note;else delete completed.journalNote;});
+   toast('Journal note saved.');break;
+ }
+ case 'journal-resume':{
+   if(ui.view!=='journal')break;
+   if(!store.data.sessions.some(entry=>entry.lessonId===data.id))break;
+   const opener=e?.target?.closest('[data-action="journal-resume"]');
+   if(opener?.id){ui.journalFocus={id:opener.id,lessonId:data.id};navigation.commit(captureRoute());}
+   if(current()?.id===data.id)player.pause({save:false});
+   openLesson(data.id);
+   break;
+ }
  case 'summary-restart':closeModal();player.seekPhrase(l.phrases[0]?.id,false);break;
  case 'summary-difficult':{const first=l?.phrases.find(phrase=>l.statuses[phrase.id]?.difficult);if(!first){toast('No phrases marked Difficult yet.');return;}closeModal();player.setSelection('difficult');player.seekPhrase(first.id,false);break;}
- case 'history':ui.modal={type:'history'};render();break;
  case 'new-collection':collectionsUI.action('new');break;
  case 'collection':collectionsUI.action('open',{id:data.id});break;
  case 'lesson-actions':ui.uploadError='';ui.modal={type:'lesson-actions',id:data.id};render();break;
@@ -852,7 +968,7 @@ function action(name,data,e){
    else{ui.deviceDraftError='This device copy is no longer available.';render();}
    break;
  }
- case 'dismiss-sync':ui.syncDismissed=syncIssueKey(store);render();[...root.querySelectorAll('.home-appbar button,#library-search-toggle,.topbar button,.player-back')].find(el=>el.getClientRects().length)?.focus({preventScroll:true});break;
+ case 'dismiss-sync':ui.syncDismissed=syncIssueKey(store);render();[...root.querySelectorAll('#rehearsal-settings,#library-search-toggle,.player-back')].find(el=>el.getClientRects().length)?.focus({preventScroll:true});break;
  case 'retry-sync':if(!ui.syncRetrying){ui.syncRetrying=true;render();store.retry().finally(()=>{ui.syncRetrying=false;render();});}break;
  case 'conflict-cloud':ui.modal=null;store.resolveConflict(false);toast('Loaded the newer cloud copy.');break;
  case 'conflict-local':ui.modal=null;store.resolveConflict(true);toast('Saving this device’s copy.');break;

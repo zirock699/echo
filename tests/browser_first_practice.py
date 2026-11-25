@@ -82,7 +82,7 @@ def check_import(fixture, populated):
 
     wait_for_screen(page, origin)
     previous_index = page.evaluate('history.state.echoNavigation.index')
-    mobile.get_by_role('button', name='Add lessons', exact=True).click()
+    page.locator('#rehearsal-add').click()
     page.get_by_role('button', name='YouTube lesson').click()
     form = page.get_by_role('dialog', name='Create a lesson')
     form.get_by_label('YouTube URL').fill('https://www.youtube.com/watch?v=qaVtt123456')

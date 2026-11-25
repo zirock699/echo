@@ -17,7 +17,7 @@ function database(owner){
 export async function savedAttempts(owner,lessonId){if(!owner)return [];const db=await database(owner);try{return await new Promise((resolve,reject)=>{const r=db.transaction('attempts').objectStore('attempts').getAll();r.onsuccess=()=>resolve(r.result.filter(a=>a.lessonId===lessonId));r.onerror=()=>reject(r.error);});}finally{db.close();}}
 export async function writeAttempt(owner,attempt,remove=false){const db=await database(owner);try{await new Promise((resolve,reject)=>{const tx=db.transaction('attempts','readwrite');if(remove)tx.objectStore('attempts').delete(attempt.id);else tx.objectStore('attempts').put(attempt);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('Storage write interrupted'));});}finally{db.close();}}
 export class EchoMirror{
- constructor({notify,tick,pause,restore}){Object.assign(this,{notify,tick,pause,restore});this.owner=null;this.ownerGeneration=0;this.active=false;this.panelOpen=false;this.phase='idle';this.error='';this.message='';this.attempts=new Map();this.saved=[];this.token=0;this.clock=null;this.original=null;this.voice=null;this.stream=null;this.recorder=null;this.waveCache=new Map();this.context=null;this.originalBuffer=null;this.bufferIdentity='';this.savedURLs=new Map();this.playing=null;this.loadingWaves=false;this.permissionOpen=false;this.permissionKind='';}
+ constructor({notify,tick,pause,restore}){Object.assign(this,{notify,tick,pause,restore});this.owner=null;this.ownerGeneration=0;this.active=false;this.comparison=null;this.phase='idle';this.error='';this.message='';this.attempts=new Map();this.saved=[];this.token=0;this.clock=null;this.original=null;this.voice=null;this.stream=null;this.recorder=null;this.waveCache=new Map();this.context=null;this.originalBuffer=null;this.bufferIdentity='';this.savedURLs=new Map();this.playing=null;this.permissionOpen=false;this.permissionKind='';}
  setOwner(owner){
   if(this.owner===owner)return;
   this.owner=owner;this.ownerGeneration++;
@@ -26,20 +26,25 @@ export class EchoMirror{
   for(const url of this.savedURLs.values())URL.revokeObjectURL(url);
   this.context?.close().catch(()=>{});
   this.attempts.clear();this.savedURLs.clear();this.waveCache.clear();this.saved=[];
-  this.active=false;this.panelOpen=false;this.lesson=null;this.phrase=null;
+  this.active=false;this.comparison=null;this.lesson=null;this.phrase=null;
   this.original=null;this.voice=null;this.recorder=null;this.context=null;this.originalBuffer=null;
-  this.bufferIdentity='';this.originalPeaks=null;this.loadingWaves=false;this.waveError='';this.error='';
+  this.bufferIdentity='';this.originalPeaks=null;this.waveError='';this.error='';
  }
  get key(){return this.lesson&&this.phrase?this.lesson.id+':'+this.phrase.id:'';}
  get list(){return this.attempts.get(this.key)||[];}
+ get panelOpen(){return this.comparison!==null;}
  get busy(){return ['permission','original','recording','finishing','awaiting-play'].includes(this.phase);}
  enter(lesson,phrase,position,speed=1){if(!lesson?.audio||!phrase||!Number.isFinite(phrase.start)||!(phrase.end>phrase.start))throw Error('Mirror needs an audio lesson and a timed phrase.');if(this.active&&this.key===lesson.id+':'+phrase.id){this.speed=speed;return;}if(this.active)this.exit();if(this.lesson?.id!==lesson.id){this.saved=[];this.originalBuffer=null;for(const url of this.savedURLs.values())URL.revokeObjectURL(url);this.savedURLs.clear();}this.originalPeaks=null;this.lesson=lesson;this.phrase={...phrase};this.position=position;this.speed=speed;this.active=true;this.error='';this.message='Listen, record, then compare when you choose.';this.pause();this.notify();}
  releaseStream(){this.stream?.getTracks().forEach(t=>t.stop());this.stream=null;}
  stopPlayback(){this.cancelOriginal?.();this.cancelOriginal=null;clearInterval(this.playTimer);this.original?.pause();this.voice?.pause();this.playing=null;}
  interrupt(message='Recording cancelled. Previous attempts are unchanged.',notify=true){this.token++;clearInterval(this.clock);this.stopPlayback();if(this.recorder?.state==='recording')this.recorder.stop();this.releaseStream();this.phase='idle';this.permissionOpen=false;this.message=message;if(notify){this.tick();this.notify();}}
- exit(){if(!this.active)return;this.interrupt('');this.active=false;this.panelOpen=false;this.restore(this.position);this.notify();}
+ exit(){if(!this.active)return;this.interrupt('',false);this.active=false;this.comparison=null;this.restore(this.position);this.notify();}
  async record(){
-  if(this.phase==='recording'){this.phase='finishing';this.recorder.stop();clearInterval(this.clock);this.notify();return;}
+  if(this.phase==='recording'){
+   this.phase='finishing';this.message='Preparing your take…';clearInterval(this.clock);
+   if(this.recorder.state!=='inactive')this.recorder.stop();
+   this.notify();return;
+  }
   if(this.busy){this.interrupt();return;}
   const blocked=microphoneBlock();if(blocked){this.error=blocked.message;this.permissionKind=blocked.kind;this.permissionOpen=true;this.notify();return;}
   const token=++this.token;this.stopPlayback();this.pause();this.error='';this.phase='permission';this.permissionOpen=true;this.permissionKind='prompt';this.message='Choose Allow in your browser’s microphone request. If it does not appear, check site permissions.';this.notify();
@@ -161,21 +166,35 @@ export class EchoMirror{
   const chunks=[];let bytes=0;const stream=this.stream;const release=()=>{stream.getTracks().forEach(t=>t.stop());if(this.stream===stream)this.stream=null;};const recorder=new MediaRecorder(stream,recordingOptions());this.recorder=recorder;this.started=performance.now();this.phase='recording';this.message='Recording — tap Stop when you finish.';this.elapsed=0;
   recorder.ondataavailable=e=>{if(token!==this.token)return;bytes+=e.data.size;if(bytes+this.memoryBytes()>MAX_BYTES){this.interrupt('Recording memory is full. Delete an attempt before recording again.');return;}if(e.data.size)chunks.push(e.data);};
   recorder.onerror=()=>{if(token===this.token)this.interrupt('Recording was interrupted. Your previous attempts are still available.');};
-  recorder.onstop=()=>{release();if(token!==this.token)return;clearInterval(this.clock);const blob=new Blob(chunks,{type:recorder.mimeType}),duration=(performance.now()-this.started)/1000;if(!blob.size||duration<.15){this.phase='idle';this.error='No usable recording was captured. Please try again.';this.notify();return;}
-   const attempt={id:crypto.randomUUID(),lessonId:this.lesson.id,phraseId:this.phrase.id,start:this.phrase.start,end:this.phrase.end,text:this.phrase.text,audioId:this.lesson.audio.id,offset:this.lesson.audioOffset||0,createdAt:Date.now(),duration,blob};attempt.url=URL.createObjectURL(blob);const old=this.list,keep=rotateAttempts(old,attempt);for(const a of old)if(!keep.includes(a)){URL.revokeObjectURL(a.url);this.waveCache.delete(a.id);}this.attempts.set(this.key,keep);this.phase='idle';this.message='Recording ready. Open Compare when you want.';this.panelOpen=false;this.error='';this.notify();};
+  recorder.onstop=()=>{
+   release();if(token!==this.token||!this.active)return;
+   clearInterval(this.clock);
+   const fromRecord=this.phase==='finishing';
+   const blob=new Blob(chunks,{type:recorder.mimeType}),duration=(performance.now()-this.started)/1000;
+   this.phase='idle';this.message='';
+   if(!blob.size||duration<.15){this.error='No usable recording was captured. Please try again.';this.notify();return;}
+   const attempt={id:crypto.randomUUID(),lessonId:this.lesson.id,phraseId:this.phrase.id,start:this.phrase.start,end:this.phrase.end,
+    text:this.phrase.text,audioId:this.lesson.audio.id,offset:this.lesson.audioOffset||0,createdAt:Date.now(),duration,blob};
+   attempt.url=URL.createObjectURL(blob);
+   const old=this.list,keep=rotateAttempts(old,attempt);
+   for(const a of old)if(!keep.includes(a)){URL.revokeObjectURL(a.url);this.waveCache.delete(a.id);}
+   this.attempts.set(this.key,keep);this.comparison=null;this.error='';
+   if(fromRecord)void this.togglePanel({fromRecord});
+   else{this.message='Recording ready. Open Compare to listen back.';this.notify();}
+  };
   recorder.start(1000);this.clock=setInterval(()=>{this.elapsed=(performance.now()-this.started)/1000;this.tick();},100);this.notify();
  }
  memoryBytes(){return [...this.attempts.values()].flat().reduce((sum,a)=>sum+a.blob.size,0);}
  async play(track){if(this.busy)return;if(this.playing===track){this.token++;this.stopPlayback();this.notify();return;}const token=++this.token;this.stopPlayback();this.pause();this.error='';try{if(track==='original'){this.notify();await this.originalSegment(token);}else{const a=[...this.list,...this.saved].find(a=>a.id===track);if(!a)return;const url=a.url||this.savedURL(a);const voice=new Audio(url);this.voice=voice;voice.playbackRate=1;this.playing=track;this.elapsed=0;voice.onended=()=>{if(token===this.token){this.stopPlayback();this.notify();}};voice.onerror=()=>{if(token===this.token){this.error='This attempt could not be played.';this.stopPlayback();this.notify();}};await voice.play();if(token!==this.token){voice.pause();return;}this.playTimer=setInterval(()=>{this.elapsed=voice.currentTime;this.tick();},100);this.notify();return;}if(token===this.token){this.playing=null;this.notify();}}catch(e){if(token===this.token){this.stopPlayback();this.error=e.message;this.notify();}}}
  savedURL(a){if(!this.savedURLs.has(a.id))this.savedURLs.set(a.id,URL.createObjectURL(a.blob));return this.savedURLs.get(a.id);}
- async togglePanel(){
+ async togglePanel({fromRecord=false}={}){
   if(this.busy||!this.lesson)return;
-  this.panelOpen=!this.panelOpen;
-  if(!this.panelOpen){this.token++;this.stopPlayback();this.notify();return;}
-  const {owner,lesson,token}=this;
+  if(this.comparison){this.comparison=null;this.token++;this.stopPlayback();this.notify();return;}
+  const {owner,lesson}=this,comparison={fromRecord};
+  this.comparison=comparison;
   this.notify();
-  try{const attempts=await savedAttempts(owner,lesson.id);if(token!==this.token||this.lesson!==lesson)return;this.saved=attempts;}
-  catch{if(token!==this.token||this.lesson!==lesson)return;this.error='Saved attempts could not be read on this device. Temporary practice still works.';}
+  try{const attempts=await savedAttempts(owner,lesson.id);if(this.comparison!==comparison)return;this.saved=attempts;}
+  catch{if(this.comparison!==comparison)return;this.error='Saved attempts could not be read on this device. Temporary practice still works.';}
   this.notify();this.loadWaves();
  }
  async save(id){
@@ -203,10 +222,10 @@ export class EchoMirror{
   this.notify();
  }
  async loadWaves(){
-  if(this.loadingWaves||!this.lesson)return;
-  const {lesson,phrase,ownerGeneration}=this;
-  const isCurrent=()=>ownerGeneration===this.ownerGeneration&&lesson===this.lesson&&phrase===this.phrase;
-  this.loadingWaves=true;this.waveError='';this.notify();
+  const {comparison,lesson,phrase}=this;
+  if(!comparison||comparison.loadingWaves||!lesson)return;
+  const isCurrent=()=>comparison===this.comparison&&lesson===this.lesson&&phrase===this.phrase;
+  comparison.loadingWaves=true;this.waveError='';this.notify();
   try{
    const context=this.context||=new (globalThis.AudioContext||globalThis.webkitAudioContext)();
    try{
@@ -238,11 +257,46 @@ export class EchoMirror{
     }catch{if(!isCurrent())return;this.waveCache.set(attempt.id,{error:true});}
    }
   }catch(e){if(isCurrent())this.waveError=e.message||'Waveforms are unavailable in this browser. Listening and recording still work.';}
-  finally{if(ownerGeneration===this.ownerGeneration){this.loadingWaves=false;this.notify();}}
+  finally{if(isCurrent()){comparison.loadingWaves=false;this.notify();}}
  }
- waveform(values,duration,total){if(!values)return '<p class="mirror-wave-empty">Waveform unavailable</p>';const width=360*duration/total;return `<svg class="mirror-wave" viewBox="0 0 360 48" role="img" aria-label="Waveform, ${duration.toFixed(1)} seconds"><path d="${values.map((p,i)=>{const x=(i+.5)*width/values.length;return `M${x.toFixed(1)},${(24-p*21).toFixed(1)}v${Math.max(1,p*42).toFixed(1)}`;}).join(' ')}" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`;}
- panel(){if(this.permissionOpen&&this.active)return this.permissionPanel();if(!this.panelOpen||!this.active)return '';const duration=(this.phrase.end-this.phrase.start)/this.speed,total=Math.max(duration,...[...this.list,...this.saved.filter(a=>sameSegment(a,this.lesson,this.phrase))].map(a=>this.waveCache.get(a.id)?.duration||a.duration));const track=(a,label,saved=false)=>`<section class="mirror-track ${this.playing===a.id?'is-playing':''}"><div class="mirror-track-head"><strong>${label}</strong><span>${(this.waveCache.get(a.id)?.duration||a.duration).toFixed(1)}s</span><button data-action="mirror-play" data-id="${a.id}" aria-label="${this.playing===a.id?'Pause':'Play'} ${label}">${this.playing===a.id?'Pause':'Play'}</button></div>${this.waveform(this.waveCache.get(a.id)?.peaks,this.waveCache.get(a.id)?.duration||a.duration,total)}${!sameSegment(a,this.lesson,this.phrase)?'<p>Recorded against an earlier or different phrase. Original timing was retained.</p>':''}<div class="mirror-track-actions">${saved?`<small>${escape(new Date(a.createdAt).toLocaleDateString())} · Saved on this device</small>`:`<button data-action="mirror-save" data-id="${a.id}" ${this.saved.some(s=>s.id===a.id)?'disabled':''}>${this.saved.some(s=>s.id===a.id)?'Saved':'Save attempt'}</button>`}<button data-action="mirror-delete" data-id="${a.id}" data-saved="${saved}">Delete</button></div></section>`;
- return `<div class="modal-shade mirror-shade"><section class="modal mirror-panel" role="dialog" aria-modal="true" aria-label="Mirror comparison"><header class="modal-head"><h2>Echo Mirror</h2><button id="mirror-close-panel" class="icon-btn" data-action="mirror-panel" aria-label="Close comparison">×</button></header><p class="mirror-sentence">${escape(this.phrase.text)}</p><p class="mirror-help">Same time scale. Waiting and pauses stay visible. Waveform heights are normalised separately, not a pronunciation score.</p><section class="mirror-track ${this.playing==='original'?'is-playing':''}"><div class="mirror-track-head"><strong>Original</strong><span>${duration.toFixed(1)}s${this.speed!==1?' at '+this.speed+'×':''}</span><button data-action="mirror-play" data-id="original">${this.playing==='original'?'Pause':'Play'} original</button></div>${this.waveform(this.originalPeaks,duration,total)}</section>${this.list[0]?track(this.list[0],'Latest'):''}${this.list[1]?`<details><summary>Previous attempt</summary>${track(this.list[1],'Previous')}</details>`:''}${!this.list.length?'<p>Use Record in the player to listen first, then record your voice.</p>':''}${this.saved.length?`<details><summary>Saved attempts (${this.saved.length})</summary>${this.saved.map(a=>track(a,'Saved attempt',true)).join('')}</details>`:''}<p id="mirror-track-status" aria-live="off">${escape(this.playing?'Playing '+(this.playing==='original'?'original':'your attempt'):this.message)}</p>${this.loadingWaves?'<p role="status">Loading waveforms…</p>':''}${this.waveError?`<p>${escape(this.waveError)}</p>`:''}${this.error?`<p role="alert">${escape(this.error)}</p>`:''}<button class="btn ghost" data-action="mirror-exit">End Mirror</button><p class="mirror-help">Saved recordings stay on this device. Nothing is uploaded.</p></section></div>`;
+ waveform(values,duration,total){if(!values)return '<p class="mirror-wave-empty">Waveform unavailable</p>';const width=360*duration/total;return `<svg class="mirror-wave" viewBox="0 0 360 48" preserveAspectRatio="none" role="img" aria-label="Waveform, ${duration.toFixed(1)} seconds"><path d="${values.map((p,i)=>{const x=(i+.5)*width/values.length;return `M${x.toFixed(1)},${(24-p*21).toFixed(1)}v${Math.max(1,p*42).toFixed(1)}`;}).join(' ')}" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`;}
+ panel(){
+  if(this.permissionOpen&&this.active)return this.permissionPanel();
+  if(!this.comparison||!this.active)return '';
+  const [latest,previous]=this.list;
+  const duration=(this.phrase.end-this.phrase.start)/this.speed;
+  const total=Math.max(duration,...[...this.list,...this.saved.filter(a=>sameSegment(a,this.lesson,this.phrase))].map(a=>this.waveCache.get(a.id)?.duration||a.duration));
+  const track=(attempt,label,saved=false)=>{
+   const wave=this.waveCache.get(attempt.id),length=wave?.duration||attempt.duration;
+   const playing=this.playing===attempt.id,keep=this.saved.some(a=>a.id===attempt.id);
+   const id=escape(attempt.id),verb=playing?'Pause':'Play';
+   return `<section class="mirror-track mirror-track-take${playing?' is-playing':''}">
+    <div class="mirror-track-head"><strong>${label}</strong><span>${length.toFixed(1)}s</span><button data-action="mirror-play" data-id="${id}" aria-label="${verb} ${label.toLowerCase()}">${verb}</button></div>
+    ${this.waveform(wave?.peaks,length,total)}
+    ${sameSegment(attempt,this.lesson,this.phrase)?'':'<p>Recorded against an earlier or different phrase. Original timing was retained.</p>'}
+    <div class="mirror-track-actions">${saved?`<small>${escape(new Date(attempt.createdAt).toLocaleDateString())} · Saved on this device</small>`:`<button data-action="mirror-save" data-id="${id}" ${keep?'disabled':''}>${keep?'Saved':'Save attempt'}</button>`}<button data-action="mirror-delete" data-id="${id}" data-saved="${saved}">Delete</button></div>
+   </section>`;
+  };
+  const playingReference=this.playing==='original';
+  const returnFocus=this.comparison.fromRecord?'#mirror-main-record':'#mirror-compare';
+  return `<div class="modal-shade mirror-shade"><section class="modal mirror-panel" role="dialog" aria-modal="true" aria-labelledby="mirror-comparison-title" data-focus-dialog="mirror:comparison" data-focus-return="${returnFocus}">
+   <header class="modal-head"><h2 id="mirror-comparison-title" tabindex="-1" data-focus-initial>Listen back</h2><button id="mirror-close-panel" class="icon-btn" data-action="mirror-panel" aria-label="Close comparison">×</button></header>
+   <p class="mirror-sentence">${escape(this.phrase.text)}</p>
+   ${latest?'<p class="mirror-listen-tip">Listen for where you paused and which words stood out.</p>':''}
+   <div class="mirror-pair">
+    <section class="mirror-track mirror-track-reference${playingReference?' is-playing':''}">
+     <div class="mirror-track-head"><strong>Reference</strong><span>${duration.toFixed(1)}s${this.speed!==1?' at '+this.speed+'×':''}</span><button data-action="mirror-play" data-id="original">${playingReference?'Pause':'Play'} reference</button></div>
+     ${this.waveform(this.originalPeaks,duration,total)}
+    </section>
+    ${latest?track(latest,'Your take'):''}
+   </div>
+   ${latest?'<p class="mirror-help">Both waveforms share a time scale. Heights show relative volume within each track.</p>':'<p>Use Record in the player to listen first, then record your voice.</p>'}
+   ${previous?`<details id="mirror-previous"><summary>Previous attempt</summary>${track(previous,'Previous attempt')}</details>`:''}
+   ${this.saved.length?`<details id="mirror-saved"><summary>Saved attempts (${this.saved.length})</summary>${this.saved.map(a=>track(a,'Saved attempt',true)).join('')}</details>`:''}
+   <p id="mirror-track-status" aria-live="off">${escape(this.playing?'Playing '+(playingReference?'reference':'your take'):this.message)}</p>
+   ${this.comparison.loadingWaves?'<p role="status">Loading waveforms…</p>':''}${this.waveError?`<p>${escape(this.waveError)}</p>`:''}${this.error?`<p role="alert">${escape(this.error)}</p>`:''}
+   <button class="btn ghost" data-action="mirror-exit">Back to reference</button><p class="mirror-help">Saved recordings stay on this device.</p>
+  </section></div>`;
  }
- dispose(){this.interrupt('');for(const list of this.attempts.values())for(const a of list)URL.revokeObjectURL(a.url);for(const url of this.savedURLs.values())URL.revokeObjectURL(url);this.context?.close().catch(()=>{});this.originalBuffer=null;this.attempts.clear();}
+ dispose(){this.comparison=null;this.interrupt('');for(const list of this.attempts.values())for(const a of list)URL.revokeObjectURL(a.url);for(const url of this.savedURLs.values())URL.revokeObjectURL(url);this.context?.close().catch(()=>{});this.originalBuffer=null;this.attempts.clear();}
 }

@@ -109,7 +109,7 @@ def run():
         # check. Activate the connected control synchronously on the ordinary path.
         playback.evaluate("document.querySelector('#mirror-main-play[aria-label=Pause]').click()")
         position = wait_for_copies(playback, lambda copies: len(copies) == 1 and copies[0]['position'] > 1)[0]['position']
-        settings.locator('.home-appbar').get_by_role('button', name='Settings', exact=True).click()
+        settings.locator('#rehearsal-settings').click()
         settings.locator('[data-pref=theme]').select_option('light')
         copies = wait_for_copies(settings, lambda copies: len(copies) == 2)
         playback_copy = next(copy for copy in copies if copy['theme'] == 'dark')

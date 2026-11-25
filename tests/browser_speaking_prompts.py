@@ -8,9 +8,9 @@ from playwright.sync_api import expect
 from browser_fixture import browser_fixture
 
 
-HOME_ACTION = 'Try a speaking prompt'
+HOME_ACTION = 'Talk now'
 HOME_TITLE = 'Speaking prompt'
-HOME_EXIT = 'Back to Home'
+HOME_EXIT = 'Back to Rehearse'
 TRANSFER_ACTION = 'Try a new conversation'
 TRANSFER_TITLE = 'Take a phrase into a new conversation'
 TRANSFER_EXIT = 'Back to Practice options'
@@ -157,7 +157,7 @@ def verify_empty_home(fixture):
     expect_home_prompt(sheet)
     expect_reachable_exit(sheet, HOME_EXIT)
     page.reload(wait_until='domcontentloaded')
-    expect(home.get_by_role('heading', name='Home', exact=True)).to_be_visible()
+    expect(home.get_by_role('heading', name='Rehearse the change.', exact=True)).to_be_visible()
     expect(sheet).to_be_hidden()
     assert not errors, errors
     page.context.close()
@@ -166,7 +166,7 @@ def verify_empty_home(fixture):
 
 def verify_stalled_account(fixture):
     page, errors = fixture.open_page(320, 568)
-    expect(page.get_by_role('heading', name='Home', exact=True)).to_be_visible()
+    expect(page.get_by_role('heading', name='Rehearse the change.', exact=True)).to_be_visible()
     # Leave the fresh document's account request pending while the cue is used.
     pending = []
     page.context.route(fixture.origin + '/api/state', lambda route: pending.append(route), times=1)
@@ -179,7 +179,7 @@ def verify_stalled_account(fixture):
     previous, position = scroll_open_prompt(page, sheet)
     assert pending, 'The fixture must actually have held a state request'
     pending.pop(0).continue_()
-    expect(page.locator('.home-screen h1')).to_have_text('Home')
+    expect(page.locator('.home-screen h1')).to_have_text('Rehearse the change.')
     expect_home_prompt(sheet)
     expect_retained_prompt(sheet, previous, position)
     expect(sheet.get_by_role('heading', name=HOME_TITLE, exact=True)).to_be_focused()
@@ -246,7 +246,7 @@ def verify_playing_home_prompt(fixture):
     page.wait_for_function('''() => {
         const resume = document.querySelector('.home-resume');
         const cue = document.querySelector('#home-speaking-prompt');
-        return resume && cue && resume.getBoundingClientRect().top < cue.getBoundingClientRect().top;
+        return resume && cue && cue.getBoundingClientRect().top < resume.getBoundingClientRect().top;
     }''')
     resume.click()
     expect_paused_phrase(page, PHRASES[0], PHRASES[0]['start'])
@@ -265,7 +265,7 @@ def verify_playing_home_prompt(fixture):
 
     page.route(state_url, hold_first_save)
     page.get_by_role('button', name='Back', exact=True).click()
-    expect(page.get_by_role('heading', name='Home', exact=True)).to_be_visible()
+    expect(page.get_by_role('heading', name='Rehearse the change.', exact=True)).to_be_visible()
     compact = page.get_by_role('region', name='Current audio lesson', exact=True)
     expect(compact.get_by_role('button', name='Pause audio', exact=True)).to_be_visible()
     wait_for_audio(page, '!audio.paused && audio.currentTime > .55')
