@@ -16,30 +16,15 @@ import {PracticeRecorder} from './recorder.mjs';
 import {parseTranscript,validateSegments,groupPhrases,activeWordIndices,remapStatuses,urlToVideoId,fmtTime,uid,splitPhrase,mergePhrases,selectedPhrases,round} from './transcript.mjs';
 import {lookupIPA,phraseIPA,normalWord} from './ipa.mjs';
 import {Store,createLesson,initialData} from './store.mjs';
-import {PlayerEngine,warmYouTube,usesUploadedAudio} from './player.mjs';
+import {PlayerEngine,usesUploadedAudio} from './player.mjs';
 import {transportState,swipeDirection,dismissCompactSwipe} from './practice.mjs';
-import {applyAmbient,prepareAmbient} from './ambient.mjs';
+import {applyAmbient,artworkURL,prepareAmbient} from './ambient.mjs';
 import {playbackFeedback} from './player-layout.mjs';
+import {practiceCue,PracticeCueRegion} from './practice-cue.mjs';
 const store=new Store(),player=new PlayerEngine(),lyrics=new LyricsScroller();
-const freshUI=()=>({started:false,compactDismissed:false,preparing:false,uploading:false,uploadError:'',queueWasPlaying:false,view:'home',search:'',libraryFilter:'all',sort:'recent',collectionId:null,modal:null,optionsTab:'playback',practicePromptDraft:null,recordingOpen:false,queue:false,queuePage:null,queueMenu:null,homeCategory:'',syncDismissed:null,syncRetrying:false,word:null,import:{url:'',title:'',speaker:'',text:'',fileName:'',offset:0,grouping:'original',preview:null,errors:[],warnings:[],format:''},pendingSummary:null});
+const freshUI=()=>({started:false,allowedVideo:null,compactDismissed:false,preparing:false,uploading:false,uploadError:'',queueWasPlaying:false,view:'home',search:'',libraryFilter:'all',sort:'recent',collectionId:null,modal:null,optionsTab:'playback',practicePromptDraft:null,deviceDraftTask:null,deviceDraftError:"",recordingOpen:false,queue:false,queuePage:null,queueMenu:null,homeCategory:'',syncDismissed:null,syncRetrying:false,word:null,import:{url:'',title:'',speaker:'',text:'',fileName:'',offset:0,grouping:'original',preview:null,errors:[],warnings:[],format:''},pendingSummary:null});
 const ui=freshUI();
-const speakingPrompts={
- 'home-prompt':{
-  title:'Speaking prompt',
-  situation:'Your colleague expects the figures on Tuesday. They’ll be ready on Thursday. Ask your colleague to check them on Friday.',
-  task:'Say the update in your own words.',
-  note:'One short reply is enough. You can plan silently.',
-  exit:'Back to Home'
- },
- 'transfer-prompt':{
-  title:'Take a phrase into a new conversation',
-  situation:'A teammate expects tomorrow’s meeting to be online. It will be in the studio instead. Ask them to bring the draft.',
-  task:'Give the update in your own words.',
-  note:'If it helps, borrow an expression or a way of emphasising a detail from your selected phrase.',
-  exit:'Back to Practice options'
- }
-};
-const activePrompt=()=>speakingPrompts[ui.modal?.type]??null;
+const activePrompt=()=>practiceCue(ui.modal);
 const root=document.querySelector('#app'),dock=document.querySelector('#youtube-dock'),toaster=document.querySelector('#toast');
 const focus=new RenderFocus(root);
 root.addEventListener('click',e=>focus.rememberInvoker(e.target.closest('[data-action],[data-lx],[data-cx],[data-sx]')),{capture:true});
@@ -59,7 +44,7 @@ function captureRoute(){
   collections:{id:collectionsUI.id,query:collectionsUI.query,lessonQuery:collectionsUI.lessonQuery,page:collectionsUI.page,lessonPage:collectionsUI.lessonPage,dialog:collectionsUI.dialog,draftId:collectionsUI.draft.id},
   mirrorPanel:mirror.panelOpen,
   overlay:!!(ui.modal||libraryUI.dialog||collectionsUI.dialog||mirror.panelOpen||ui.view==='player'&&ui.queue&&mobileLayout()),
-  nestedOverlay:modal?.type==='transfer-prompt',transient:!!activePrompt()
+  nestedOverlay:modal?.type==='transfer-prompt'&&modal.from!=='player',transient:!!activePrompt()
  };
 }
 function restoreRoute(route){
@@ -76,7 +61,7 @@ function restoreRoute(route){
  if(route.search)Object.assign(searchUI,route.search);
  if(route.library){Object.assign(libraryUI.state,route.library.state);Object.assign(libraryUI,{kind:route.library.kind,page:route.library.page||1,searchOpen:!!route.library.searchOpen,dialog:route.library.dialog||''});}
  const collection=route.collections;if(collection){Object.assign(collectionsUI,{id:collection.id,query:collection.query||'',lessonQuery:collection.lessonQuery||'',page:collection.page||1,lessonPage:collection.lessonPage||1,dialog:collection.dialog||''});if(collectionsUI.dialog==='edit'){const c=store.data.collections.find(c=>c.id===collection.draftId);if(c)collectionsUI.draft={id:c.id,name:c.name};else collectionsUI.dialog='';}if(collectionsUI.dialog==='pick'&&!collectionsUI.collection)collectionsUI.dialog='';}
- if(ui.view==='player'&&route.lessonId&&current()?.id!==route.lessonId){if(store.data.lessons.some(l=>l.id===route.lessonId))openLesson(route.lessonId);else{ui.view='library';ui.modal=null;ui.queue=false;}}
+ if(ui.view==='player'&&route.lessonId&&current()?.id!==route.lessonId){if(store.data.lessons.some(l=>l.id===route.lessonId))openLesson(route.lessonId,{activateYouTube:false});else{ui.view='library';ui.modal=null;ui.queue=false;}}
  if(ui.modal?.type==='transfer-prompt'&&!player.current())ui.modal=null;
  if(ui.modal?.type==='regroup'&&current()){const preview=groupPhrases(current().segments,ui.modal.grouping);ui.modal={...ui.modal,preview,remap:remapStatuses(current().phrases,preview,current().statuses)};}
  if(route.mirrorPanel&&current()&&player.current()){ensureMirror();mirror.togglePanel();}
@@ -98,7 +83,10 @@ function mirrorTick(){const el=document.getElementById('mirror-status');if(el)el
 const SVG={wave:'<path d="M3 10v4M7 6v12M12 3v18M17 6v12M21 10v4"/>',expand:'<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>',sliders:'<path d="M3 6h4m4 0h10M3 12h10m4 0h4M3 18h4m4 0h10"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="18" r="2"/>',home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',library:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/>',plus:'<path d="M12 5v14M5 12h14"/>',search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',heart:'<path d="M20.8 8.6c0 4.2-8.8 10.8-8.8 10.8S3.2 12.8 3.2 8.6a4.7 4.7 0 0 1 8.8-2.3 4.7 4.7 0 0 1 8.8 2.3z"/>',list:'<path d="M4 6h16M4 12h16M4 18h16"/>',settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',chevron:'<path d="m15 18-6-6 6-6"/>',close:'<path d="M18 6 6 18M6 6l12 12"/>',play:'<path d="m8 5 12 7-12 7z"/>',pause:'<path d="M8 5v14M16 5v14"/>',back:'<path d="m18 6-9 6 9 6V6zM6 6v12"/>',next:'<path d="m6 6 9 6-9 6V6zM18 6v12"/>',replay:'<path d="M3 11a9 9 0 1 1 2.3 6M3 4v7h7"/>',loop:'<path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/>',eye:'<path d="M2 12S6 5 12 5s10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',eyeoff:'<path d="m3 3 18 18M10.6 5.1A9 9 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.3 4.2M6.2 6.6A17 17 0 0 0 2 12s4 7 10 7a9 9 0 0 0 4-.9"/>',check:'<path d="m5 12 4 4L19 6"/>',flag:'<path d="M5 22V4m0 0c5-4 9 4 15 0v12c-6 4-10-4-15 0"/>',more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',music:'<path d="M9 18V5l12-3v13"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="18" cy="15" rx="3" ry="2"/>',folder:'<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',upload:'<path d="m12 16 0-13m-5 5 5-5 5 5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/>',download:'<path d="M12 3v13m-5-5 5 5 5-5M4 18v3h16v-3"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 1v2m0 18v2M1 12h2m18 0h2M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2"/>',moon:'<path d="M20 15A8 8 0 0 1 9 4 8 8 0 1 0 20 15"/>',spark:'<path d="m12 2 2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z"/>',edit:'<path d="m4 16 11-11 4 4-11 11-5 1zM13 7l4 4"/>',trash:'<path d="M4 7h16M10 3h4M6 7l1 14h10l1-14"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/>',keyboard:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h1m3 0h1m3 0h1m3 0h1M7 15h10"/>',volume:'<path d="M11 5 6 9H3v6h3l5 4zM15 9a4 4 0 0 1 0 6M18 5a9 9 0 0 1 0 14"/>',chevrondown:'<path d="m6 9 6 6 6-6"/>'};
 const ico=(name,cls='')=>name==='settings'?uiIcon('settings'):`<svg class="${cls}" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[name]||SVG.spark}</svg>`;
 const esc=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const cueRegion=new PracticeCueRegion(root,ico('close'));
 const attr=t=>esc(t);const current=()=>player.lesson;const pref=()=>store.data.preferences;
+const videoAllowed=lesson=>!!lesson?.videoId&&!usesUploadedAudio(lesson)&&ui.allowedVideo===lesson.videoId;
+function initialiseSource(lesson){if(usesUploadedAudio(lesson)||videoAllowed(lesson))player.initialise();}
 const badge=(name)=>`<span class="pill">${name}</span>`;
 let toastTimer;
 function toast(message){toaster.textContent=message;toaster.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toaster.classList.remove('show'),3500);}
@@ -106,7 +94,8 @@ function applyTheme(){const v=pref().theme;const light=v==='light'||(v==='system
 function syncHTML(){
  const modes={cloud:store.pending?'Saving…':'Synced',local:'Sync unavailable',offline:'Pending sync',checking:'Connecting…',conflict:'Sync conflict',rejected:'Sync needs attention'};
  const problem=syncProblem(store);
- const label=problem?.key==='storage-saved'?'Device storage unavailable':modes[store.mode]??'Sync unavailable';
+ const label=store.deviceReviewRequired?'Review device copies':
+  problem?.key==='storage-saved'?'Device storage unavailable':modes[store.mode]??'Sync unavailable';
  return `<div class="sync-status" title="${label}"><span class="sync-dot ${problem?'warn':''}"></span><span>${label}</span></div>`;
 }
 function settingsSync(){
@@ -114,16 +103,18 @@ function settingsSync(){
  const retry=problem?.action==='retry-sync';
  const message=problem?.key==='storage-saved'?'Saved to your account. Device storage is unavailable.':problem?.message??syncSaveMessage(store);
  const action=problem?` <button id="settings-sync-action" class="text-link" data-action="${problem.action}" ${retry&&ui.syncRetrying?'disabled':''}>${retry?(ui.syncRetrying?'Retrying…':'Retry sync'):problem.label}</button>`:'';
- return `<span class="micro">${esc(message)}${action}</span>`;
+ const copies=store.deviceDrafts.length&&problem?.action!=='device-drafts'
+  ?' <button id="settings-device-drafts" class="text-link" data-action="device-drafts">Review device copies</button>':'';
+ return `<span class="micro">${esc(message)}${action}${copies}</span>`;
 }
 function navitem(view,label,icon){return `<button data-action="view" data-view="${view}" ${ui.view===view?'aria-current="page"':''} class="navitem ${ui.view===view?'active':''}">${ico(icon)}${label}</button>`;}
-function shell(content){const active=current();return `<div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-icon">${ico('replay')}</span>Echo Studio</div>${navitem('home','Home','home')}${navitem('library','My Library','library')}${navitem('collections','Collections','folder')}${navitem('search','Search','search')}${navitem('settings','Settings','settings')}<div class="sidebar-bottom"><button class="btn primary" style="width:100%" data-action="open-add">${ico('plus')} Add lessons</button></div></aside><div class="page"><header class="topbar"><div class="brand-mobile" ><span class="brand-icon">${ico('replay')}</span>Echo Studio</div><div class="top-actions">${syncHTML()}<button class="icon-btn" data-action="settings-shortcut" title="Settings" aria-label="Settings">${ico('settings')}</button></div></header>${content}</div></div>${syncBanner()}<nav class="mobile-nav">${[['home','Home','home'],['library','Library','library'],['add','Add','plus'],['collections','Collections','folder'],['search','Search','search']].map(([v,l,i])=>`<button data-action="${v==='add'?'open-add':'view'}" ${v==='add'?'aria-label="Add lessons"':`data-view="${v}"`} ${(ui.view===v)?'aria-current="page"':''} class="${(ui.view===v)?'active':''}">${ico(i)}${l}</button>`).join('')}</nav>${active&&ui.started&&!ui.compactDismissed&&ui.view!=='player'?compact():''}${ui.queue&&active?queue():''}${ui.modal?modal():''}${libraryUI.overlay()}${collectionsUI.overlay()}${mirror.panel()}`;}
+function shell(content){const active=current();return `<div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-icon">${ico('replay')}</span>Echo Studio</div>${navitem('home','Home','home')}${navitem('library','My Library','library')}${navitem('collections','Collections','folder')}${navitem('search','Search','search')}${navitem('settings','Settings','settings')}<div class="sidebar-bottom"><button class="btn primary" style="width:100%" data-action="open-add">${ico('plus')} Add lessons</button></div></aside><div class="page"><header class="topbar"><div class="brand-mobile" ><span class="brand-icon">${ico('replay')}</span>Echo Studio</div><div class="top-actions">${syncHTML()}<button class="icon-btn" data-action="settings-shortcut" title="Settings" aria-label="Settings">${ico('settings')}</button></div></header>${content}</div></div>${syncBanner()}<nav class="mobile-nav">${[['home','Home','home'],['library','Library','library'],['add','Add','plus'],['collections','Collections','folder'],['search','Search','search']].map(([v,l,i])=>`<button data-action="${v==='add'?'open-add':'view'}" ${v==='add'?'aria-label="Add lessons"':`data-view="${v}"`} ${(ui.view===v)?'aria-current="page"':''} class="${(ui.view===v)?'active':''}">${ico(i)}${l}</button>`).join('')}</nav>${active&&ui.started&&!ui.compactDismissed&&ui.view!=='player'?compact():''}${ui.queue&&active?queue():''}${ui.modal&&!activePrompt()?modal():''}${libraryUI.overlay()}${collectionsUI.overlay()}${mirror.panel()}`;}
 function syncBanner(){return syncNoticeHTML(store,{dismissed:ui.syncDismissed,retrying:ui.syncRetrying});}
 function listeningDuration(seconds){const total=Math.max(0,Math.round(seconds||0)),minutes=Math.floor(total/60),rest=total%60;return minutes?`${minutes} min${rest?` ${rest} s`:''}`:`${rest} s`;}
-function lessonCard(l){const {value:pct,label}=progressIndicator(l);return `<article class="lesson-card"><button class="thumb" type="button" data-action="open-lesson" data-id="${attr(l.id)}" aria-label="Open ${attr(l.title)}"><img loading="lazy" src="${attr(l.thumbnail?.url||l.frame?.url||`https://i.ytimg.com/vi/${encodeURIComponent(l.videoId)}/hqdefault.jpg`)}" alt="Video thumbnail"><span class="card-play">${ico('play')}</span></button><div class="card-title" title="${attr(l.title)}">${esc(l.title)}</div><div class="card-sub">${esc(l.speaker||'YouTube recording')} · ${l.duration?fmtTime(l.duration):`${l.phrases.length} phrases`}</div><div class="card-bottom">${pct===null?'':`<div class="mini-progress" title="${attr(label)}"><i style="width:${pct}%"></i></div>`}<span class="micro">${esc(label)}</span><button class="icon-btn" data-action="lesson-actions" data-id="${attr(l.id)}" title="Manage lesson" aria-label="Manage lesson" style="width:27px;height:27px">${ico('more')}</button><button class="icon-btn" data-action="favourite" data-id="${attr(l.id)}" style="width:27px;height:27px;color:${l.favourite?'var(--accent)':'var(--muted)'}" title="${l.favourite?'Remove favourite':'Add favourite'}">${ico('heart')}</button></div></article>`;}
+function lessonCard(l){const {value:pct,label}=progressIndicator(l),art=artworkURL(l);return `<article class="lesson-card"><button class="thumb" type="button" data-action="open-lesson" data-id="${attr(l.id)}" aria-label="Open ${attr(l.title)}">${art?`<img loading="lazy" src="${attr(art)}" alt="">`:ico('music')}<span class="card-play">${ico('play')}</span></button><div class="card-title" title="${attr(l.title)}">${esc(l.title)}</div><div class="card-sub">${esc(l.speaker||'YouTube recording')} · ${l.duration?fmtTime(l.duration):`${l.phrases.length} phrases`}</div><div class="card-bottom">${pct===null?'':`<div class="mini-progress" title="${attr(label)}"><i style="width:${pct}%"></i></div>`}<span class="micro">${esc(label)}</span><button class="icon-btn" data-action="lesson-actions" data-id="${attr(l.id)}" title="Manage lesson" aria-label="Manage lesson" style="width:27px;height:27px">${ico('more')}</button><button class="icon-btn" data-action="favourite" data-id="${attr(l.id)}" style="width:27px;height:27px;color:${l.favourite?'var(--accent)':'var(--muted)'}" title="${l.favourite?'Remove favourite':'Add favourite'}">${ico('heart')}</button></div></article>`;}
 function empty(title,text,button=true){return `<div class="empty"><div class="empty-icon">${ico('music')}</div><h3>${title}</h3><p>${text}</p>${button?`<button class="btn primary" data-action="open-add">${ico('plus')} Add your first lesson</button>`:''}</div>`;}
 function homeArtwork(item,kind){
- const url=kind==='c'?libraryUI.coverFor(item):kind==='collection'?null:item.thumbnail?.url||item.frame?.url||(item.videoId?`https://i.ytimg.com/vi/${encodeURIComponent(item.videoId)}/mqdefault.jpg`:null);
+ const url=kind==='c'?libraryUI.coverFor(item):kind==='collection'?null:artworkURL(item);
  return `<span class="shelf-art">${url?`<img loading="lazy" src="${attr(url)}" alt="">`:ico(kind==='collection'?'folder':'music')}</span>`;
 }
 function homeShelfCard({kind,item},shelfId){
@@ -136,14 +127,14 @@ function shelfMoreCard(shelf){
  const lessons=shelfArtworkLessons(store.data,shelf),tiles=Array.from({length:4},(_,i)=>lessons.length?homeArtwork(lessons[i%lessons.length],'l'):homeArtwork({},'l')).join('');
  return `<article class="shelf-card shelf-more-card"><button class="shelf-open" data-action="home-see-all" data-shelf="${attr(shelf.id)}" aria-label="See all ${attr(shelf.title)}"><span class="shelf-mosaic" aria-hidden="true">${tiles}</span><strong>See all</strong><small>${shelf.total} ${shelf.destination.view==='collections'?(shelf.total===1?'collection':'collections'):shelf.destination.kind==='courses'?(shelf.total===1?'course':'courses'):(shelf.total===1?'item':'items')}</small></button></article>`;
 }
-function homePromptButton(){
- return '<button id="home-speaking-prompt" class="btn ghost home-prompt" type="button" aria-haspopup="dialog" data-action="home-speaking-prompt">Try a speaking prompt</button>';
+function homePromptButton(primary=false){
+ return `<button id="home-speaking-prompt" class="btn ${primary?'primary':'ghost'} home-prompt" type="button" aria-haspopup="dialog" data-action="home-speaking-prompt">Try a speaking prompt</button>`;
 }
 function home(){
  const data=store.data,lessons=data.lessons,resume=lessons.find(l=>l.id===data.lastLessonId)||[...lessons].sort((a,b)=>(b.importedAt||b.createdAt)-(a.importedAt||a.createdAt))[0];
  const shelves=homeShelves(data);libraryUI.lessonIndex=new Map(lessons.map(l=>[l.id,l]));
  return `<main class="home-screen"><header class="home-appbar"><h1>Home</h1><div class="library-app-actions"><button class="icon-btn" data-action="library-search" aria-label="Search">${ico('search')}</button><button class="icon-btn" data-action="settings-shortcut" aria-label="Settings">${ico('settings')}</button></div></header>
- <div class="home-start">${resume?`<button class="home-resume" data-action="open-lesson" data-id="${attr(resume.id)}" aria-label="Resume lesson">${homeArtwork(resume,'l')}<span class="home-resume-copy"><small>Continue practising</small><strong>${esc(resume.title)}</strong><small>${esc(progressLabel(resume))}</small></span><span class="home-resume-play" aria-hidden="true">${ico('play')}</span></button>`:`<section class="first-lesson"><h2>Add your first lesson</h2><p class="muted">Import a ZIP of lessons, or add a recording and transcript to start practising.</p><button class="btn primary" data-action="open-add">${ico('plus')} Add lessons</button></section>`}${homePromptButton()}</div>
+ ${resume?`<div class="home-start"><button class="home-resume" data-action="open-lesson" data-id="${attr(resume.id)}" aria-label="Resume lesson">${homeArtwork(resume,'l')}<span class="home-resume-copy"><small>Continue practising</small><strong>${esc(resume.title)}</strong><small>${esc(progressLabel(resume))}</small></span><span class="home-resume-play" aria-hidden="true">${ico('play')}</span></button>${homePromptButton()}</div>`:`<div class="home-start home-start-empty"><section class="home-quick-practice"><h2>Speak from a situation</h2>${homePromptButton(true)}</section><section class="first-lesson"><h2>Add your first lesson</h2><p class="muted">Import a ZIP, or add a recording and transcript.</p><button class="btn ghost" data-action="open-add">${ico('plus')} Add lessons</button></section></div>`}
  ${shelves.map(shelf=>`<section class="home-shelf ${shelf.items.length<=2?'shelf-compact':''}" aria-labelledby="shelf-${attr(shelf.id)}"><header><h2 id="shelf-${attr(shelf.id)}">${esc(shelf.title)}</h2><div class="shelf-heading-actions">${shelf.hasMore?`<button id="home-more-${attr(shelf.id)}" class="text-link" data-action="home-see-all" data-shelf="${attr(shelf.id)}" aria-label="See all ${attr(shelf.title)}">See all</button>`:''}<div class="shelf-scroll-controls" data-shelf-scroll-controls hidden><button class="icon-btn" data-action="shelf-scroll" data-shelf="${attr(shelf.id)}" data-direction="left" aria-label="Scroll ${attr(shelf.title)} left" aria-controls="home-track-${attr(shelf.id)}">${ico('chevron')}</button><button class="icon-btn" data-action="shelf-scroll" data-shelf="${attr(shelf.id)}" data-direction="right" aria-label="Scroll ${attr(shelf.title)} right" aria-controls="home-track-${attr(shelf.id)}">${ico('chevron','shelf-next')}</button></div></div></header><div id="home-track-${attr(shelf.id)}" class="shelf-track" data-scroll-key="shelf-${attr(shelf.id)}" role="region" aria-label="${attr(shelf.title)}" tabindex="0">${shelf.items.map(entry=>homeShelfCard(entry,shelf.id)).join('')}${shelf.hasMore?shelfMoreCard(shelf):''}</div></section>`).join('')}
  <button id="home-manage-categories" class="text-link home-manage-categories" data-action="home-categories">Manage categories</button></main>`;
 }
@@ -182,19 +173,29 @@ function settings(){
 }
 function statusControls(phrase){const s=current()?.statuses[phrase.id]||{};return `<div class="phrase-flags"><button class="pill ${s.practised?'active':''}" data-action="mark" data-id="${attr(phrase.id)}" data-status="practised" aria-pressed="${!!s.practised}">${ico('check')} ${s.practised?'Practised':'Mark practised'}</button><button class="pill ${s.difficult?'active':''}" data-action="mark" data-id="${attr(phrase.id)}" data-status="difficult" aria-pressed="${!!s.difficult}">${ico('flag')} Difficult</button></div>`;}
 function phraseWords(p){if(!current()?.phrases.length)return '<span class="transcript-unavailable">Transcript unavailable<span>Listen to the audio. Add or replace a transcript in Lesson options to enable shadowing.</span></span>';if(!pref().showText)return '<span class="muted">Phrase hidden. Listen carefully.</span>';if(!p)return 'No phrase selected';const words=p.text.split(/(\s+)/);let index=-1;const activeWords=new Set(activeWordIndices(p,player.time));return '<span class="phrase-inner">'+words.map(w=>{if(!w.trim())return ' ';index++;return `<button class="word ${activeWords.has(index)?'current-word':''}" data-action="word" data-focus-key="${attr(JSON.stringify([current().id,p.id,index]))}" data-word="${attr(w)}" title="View British IPA">${esc(w)}</button>`;}).join('')+'</span>';}
+const videoAwaitingChoice=lesson=>!!lesson&&!usesUploadedAudio(lesson)&&!videoAllowed(lesson);
+function canTransferFromPlayer(p=player.current()){
+ return !!p&&!player.playing&&!mirror.active&&!mirror.panelOpen&&
+  (videoAwaitingChoice(current())||(player.state==='loading'&&!player.wantsPlayback)||
+   ['ready','paused','speaking-pause','stalled','blocked','error'].includes(player.state));
+}
 function playerView(){
  const l=current(),p=player.current();if(!l)return empty('Choose a lesson','Open a lesson from your library.');
  const audio=usesUploadedAudio(l),transport=transportState(player),failed=player.state==='error',disabled=!player.ready||failed;
  const mirrorAvailable=audio&&!!p&&p.end>p.start;
- const feedback=playbackFeedback(player.state,audio);
+ const needsVideo=videoAwaitingChoice(l);
+ const provider=!activePrompt()&&videoAllowed(l);
+ const cover=artworkURL(l,{allowYouTube:provider,large:true}),sourceArt=artworkURL(l,{allowYouTube:provider});
+ const feedback=playbackFeedback(needsVideo?'idle':player.state,audio),transfer=canTransferFromPlayer(p);
  const last=player.eligible().at(-1)?.id===p?.id,index=l.phrases.findIndex(q=>q.id===p?.id)+1,duration=p?p.end-p.start:player.duration||l.duration||0;
- return `<main class="player-page immersive-player ${audio?'audio-only':''} ${mirrorAvailable?'mirror-enabled':''}" data-ambient-source="${attr(l.ambientPalette?.source||'preparing')}" aria-label="Practice player"><img class="player-artwork" src="${attr(l.thumbnail?.url||l.frame?.url||`https://i.ytimg.com/vi/${encodeURIComponent(l.videoId)}/hqdefault.jpg`)}" alt="">
- <header class="player-top"><button class="icon-btn player-back" data-action="back" aria-label="Back" title="Back">${ico('chevrondown')}</button><div class="player-title"><img class="player-source-art" src="${attr(l.thumbnail?.url||l.frame?.url||`https://i.ytimg.com/vi/${encodeURIComponent(l.videoId)}/mqdefault.jpg`)}" alt="" width="40" height="40"><span class="player-title-copy"><strong title="${attr(l.title)}">${esc(l.title)}</strong>${l.channel||l.speaker?`<small>${esc(l.channel||l.speaker)}</small>`:''}</span></div><div class="session-actions"><button id="player-options-toggle" class="icon-btn" data-action="player-settings" aria-label="Player settings" title="Player settings">${ico('settings')}</button></div></header>
+ return `<main class="player-page immersive-player ${audio?'audio-only':''} ${mirrorAvailable?'mirror-enabled':''}" data-ambient-source="${attr(l.ambientPalette?.source||'preparing')}" aria-label="Practice player">${cover?`<img class="player-artwork" src="${attr(cover)}" alt="">`:''}
+ <header class="player-top"><button class="icon-btn player-back" data-action="back" aria-label="Back" title="Back">${ico('chevrondown')}</button><div class="player-title">${sourceArt?`<img class="player-source-art" src="${attr(sourceArt)}" alt="" width="40" height="40">`:`<span class="player-source-art shelf-art" aria-hidden="true">${ico('music')}</span>`}<span class="player-title-copy"><strong title="${attr(l.title)}">${esc(l.title)}</strong>${l.channel||l.speaker?`<small>${esc(l.channel||l.speaker)}</small>`:''}</span></div><div class="session-actions"><button id="player-options-toggle" class="icon-btn" data-action="player-settings" aria-label="Player settings" title="Player settings">${ico('settings')}</button></div></header>
  <div class="player-content">
- <div class="playback-notice ${feedback.visible?'':'sr-only'}" role="status" aria-live="polite">${feedback.visible?`<button data-action="playback-details">${esc(feedback.label)}</button>`:esc(feedback.label)}</div>
  <div class="practice-body">
- <section class="phrase-panel" aria-label="Transcript">${pref().showText&&p?'<div id="lyrics-viewport" class="lyrics-viewport" tabindex="0" aria-label="Scroll transcript and choose a phrase"></div><button class="lyrics-follow" data-action="lyrics-follow" hidden>Current phrase</button>':`<div class="phrase-text" id="active-phrase">${phraseWords(p)}</div>`}</section>
- ${audio?'':'<section class="media-info" aria-label="YouTube recording"><div class="video-slot" id="video-slot"></div></section>'}
+ <div class="transcript-area">
+ <div class="player-feedback-row${transfer?' has-transfer':''}">${transfer?'<button id="player-transfer-prompt" class="player-transfer-prompt text-link" type="button" data-action="practice-transfer-prompt" data-from="player" aria-haspopup="dialog">Try a new conversation</button>':''}<div class="playback-notice ${feedback.visible?'':'sr-only'}" role="status" aria-live="polite">${feedback.visible?`<button data-action="playback-details">${esc(feedback.label)}</button>`:esc(feedback.label)}</div></div>
+ <section class="phrase-panel" aria-label="Transcript">${pref().showText&&p?'<div id="lyrics-viewport" class="lyrics-viewport" tabindex="0" aria-label="Scroll transcript and choose a phrase"></div><button class="lyrics-follow" data-action="lyrics-follow" hidden>Current phrase</button>':`<div class="phrase-text" id="active-phrase">${phraseWords(p)}</div>`}</section></div>
+ ${audio?'':`<section class="media-info" aria-label="YouTube recording"><div class="video-slot" id="video-slot">${needsVideo?'<button class="btn ghost" data-action="load-youtube">Load YouTube video</button>':''}</div></section>`}
  </div>
  <div id="swipe-zone" class="swipe-zone" aria-label="Swipe left for next phrase or right for previous phrase"><span class="sr-only" id="mirror-status" role="status">${mirror.active?esc(mirror.error||mirror.message):''}</span></div>
  <footer class="practice-footer">
@@ -206,8 +207,8 @@ function playerView(){
  </main>`;
 }
 function dismissCompact(){ui.compactDismissed=true;player.pause();render();}
-function compact(){const l=current(),audio=usesUploadedAudio(l),label=player.playing||['speaking-pause','buffering'].includes(player.state)?'Pause':'Play';
- return `<section class="compact-player compact-audio" aria-label="Current ${audio?'audio':'YouTube'} lesson"><button id="compact-expand" class="compact-expand" data-action="view" data-view="player" aria-label="Open player: ${attr(l.title)}"><span class="compact-art ${audio?'':'compact-video-slot'}" aria-hidden="true"><img src="${attr(l.thumbnail?.url||l.frame?.url||`https://i.ytimg.com/vi/${encodeURIComponent(l.videoId)}/mqdefault.jpg`)}" alt="" width="40" height="40"></span><span class="compact-info"><strong>${esc(l.title)}</strong><span>${esc(player.current()?.text||'')}</span></span></button><button id="compact-toggle" class="icon-btn" data-action="toggle" aria-label="${label} ${audio?'audio':'video'}" ${!player.ready||player.state==='error'?'disabled':''}>${ico(label==='Pause'?'pause':'play')}</button><button class="icon-btn compact-close" data-action="compact-close" aria-label="Close mini player">${ico('close')}</button><progress id="compact-progress" max="100" value="0" aria-label="Recording position"></progress></section>`;
+function compact(){const l=current(),audio=usesUploadedAudio(l),art=artworkURL(l),label=player.playing||['speaking-pause','buffering'].includes(player.state)?'Pause':'Play';
+ return `<section class="compact-player compact-audio" aria-label="Current ${audio?'audio':'YouTube'} lesson"><button id="compact-expand" class="compact-expand" data-action="view" data-view="player" aria-label="Open player: ${attr(l.title)}"><span class="compact-art ${audio?'':'compact-video-slot'}" aria-hidden="true">${art?`<img src="${attr(art)}" alt="" width="40" height="40">`:ico('music')}</span><span class="compact-info"><strong>${esc(l.title)}</strong><span>${esc(player.current()?.text||'')}</span></span></button><button id="compact-toggle" class="icon-btn" data-action="toggle" aria-label="${label} ${audio?'audio':'video'}" ${!player.ready||player.state==='error'?'disabled':''}>${ico(label==='Pause'?'pause':'play')}</button><button class="icon-btn compact-close" data-action="compact-close" aria-label="Close mini player">${ico('close')}</button><progress id="compact-progress" max="100" value="0" aria-label="Recording position"></progress></section>`;
 }
 const QUEUE_PAGE_SIZE=80;
 function queue(){
@@ -265,7 +266,7 @@ function holdQueuePage(list,index=Number(list?.dataset.page)){
  if(ui.queuePage?.lessonId!==list.dataset.lessonId||ui.queuePage.index!==index)ui.queuePage={lessonId:list.dataset.lessonId,index};
 }
 function selectOption(values,selected){return values.map(([v,l])=>`<option value="${attr(v)}" ${String(selected)===String(v)?'selected':''}>${esc(l)}</option>`).join('');}
-function lessonForm(l){return `<button id="lesson-favourite-${attr(l.id)}" class="text-link" data-action="favourite" data-id="${attr(l.id)}" aria-pressed="${!!l.favourite}">${ico('heart')} ${l.favourite?'Remove from favourites':'Add to favourites'}</button><div class="form-group"><label>Rename lesson</label><input id="rename-lesson" value="${attr(l.title)}"></div><div class="form-group"><label>Speaker</label><input id="rename-speaker" value="${attr(l.speaker||'')}"></div><div style="margin-bottom:15px"><button class="btn small ghost" data-action="replace-transcript">${ico('edit')} Replace transcript</button></div><details id="lesson-media-detail" class="lesson-media" open><summary id="lesson-media-summary">Recording source</summary><p class="field-note">Use your own audio instead of the YouTube player.</p>${l.audio?`<div class="audio-file"><strong>${esc(l.audio.name)}</strong><span class="micro">${(l.audio.size/1048576).toFixed(1)} MB</span></div><div class="form-group"><label for="lesson-media-source">Play from</label><select id="lesson-media-source" data-lesson-id="${attr(l.id)}">${selectOption([['audio','Uploaded audio'],['youtube','YouTube video']],l.mediaSource||'audio')}</select></div><div class="form-group"><label for="audio-offset">Audio timing offset (seconds)</label><input id="audio-offset" data-lesson-id="${attr(l.id)}" type="number" step="0.1" value="${l.audioOffset||0}"><span class="field-note">Leave at 0 for a matching recording. If your audio starts 10 seconds later in the original, use −10.</span></div><button class="text-link" data-action="preview-audio-source" data-id="${attr(l.id)}">Preview current phrase</button>`:''}<label class="btn ghost small" for="lesson-audio-file">${ico('upload')} ${ui.uploading?'Uploading…':l.audio?'Replace audio':'Upload audio'}</label><input type="file" id="lesson-audio-file" data-lesson-id="${attr(l.id)}" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.webm,.flac" ${ui.uploading?'disabled':''} hidden><p class="field-note">Up to 50 MB. Saved privately to your account.</p>${ui.uploadError?`<div class="alert" role="alert">${esc(ui.uploadError)}</div>`:''}${l.audio?`<button class="text-link" data-action="remove-audio" data-id="${attr(l.id)}">Remove uploaded audio</button>`:''}</details><div class="form-group"><label for="startup-lesson">Prepare when the app opens</label><select id="startup-lesson" data-pref="startupLesson">${selectOption([['recent','Last-used lesson'],[l.id,'This lesson'],['none','No lesson']],pref().startupLesson||'recent')}</select><span class="field-note">Prepare playback without starting it.</span></div><div class="form-group"><label>Add to collections</label>${store.data.collections.map(c=>`<label style="display:flex;align-items:center;gap:9px;padding:6px 0"><input type="checkbox" data-collection-toggle="${attr(c.id)}" ${c.lessonIds.includes(l.id)?'checked':''} style="min-height:0">${esc(c.name)}</label>`).join('')||'<span class="micro">Create a collection first.</span>'}</div><div class="modal-footer" style="justify-content:space-between"><button class="btn danger" data-action="delete-lesson" data-id="${attr(l.id)}">${ico('trash')} Delete</button><span><button class="btn ghost" data-action="modal-close">Cancel</button> <button class="btn primary" data-action="save-lesson-meta">Save</button></span></div>`;}
+function lessonForm(l){return `<button id="lesson-favourite-${attr(l.id)}" class="text-link" data-action="favourite" data-id="${attr(l.id)}" aria-pressed="${!!l.favourite}">${ico('heart')} ${l.favourite?'Remove from favourites':'Add to favourites'}</button><div class="form-group"><label>Rename lesson</label><input id="rename-lesson" value="${attr(l.title)}"></div><div class="form-group"><label>Speaker</label><input id="rename-speaker" value="${attr(l.speaker||'')}"></div><div style="margin-bottom:15px"><button class="btn small ghost" data-action="replace-transcript">${ico('edit')} Replace transcript</button></div><details id="lesson-media-detail" class="lesson-media" open><summary id="lesson-media-summary">Recording source</summary><p class="field-note">Use your own audio instead of the YouTube player.</p>${l.audio?`<div class="audio-file"><strong>${esc(l.audio.name)}</strong><span class="micro">${(l.audio.size/1048576).toFixed(1)} MB</span></div><div class="form-group"><label for="lesson-media-source">Play from</label><select id="lesson-media-source" data-lesson-id="${attr(l.id)}">${selectOption([['audio','Uploaded audio'],['youtube','YouTube video']],l.mediaSource||'audio')}</select></div><div class="form-group"><label for="audio-offset">Audio timing offset (seconds)</label><input id="audio-offset" data-lesson-id="${attr(l.id)}" type="number" step="0.1" value="${l.audioOffset||0}"><span class="field-note">Leave at 0 for a matching recording. If your audio starts 10 seconds later in the original, use −10.</span></div><button class="text-link" data-action="preview-audio-source" data-id="${attr(l.id)}">Preview current phrase</button>`:''}<label class="btn ghost small" for="lesson-audio-file">${ico('upload')} ${ui.uploading?'Uploading…':l.audio?'Replace audio':'Upload audio'}</label><input type="file" id="lesson-audio-file" data-lesson-id="${attr(l.id)}" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.webm,.flac" ${ui.uploading?'disabled':''} hidden><p class="field-note">Up to 50 MB. Saved privately to your account.</p>${ui.uploadError?`<div class="alert" role="alert">${esc(ui.uploadError)}</div>`:''}${l.audio?`<button class="text-link" data-action="remove-audio" data-id="${attr(l.id)}">Remove uploaded audio</button>`:''}</details><div class="form-group"><label for="startup-lesson">Prepare uploaded audio when the app opens</label><select id="startup-lesson" data-pref="startupLesson" aria-describedby="startup-lesson-note">${selectOption([['recent','Last-used lesson'],[l.id,'This lesson'],['none','No lesson']],pref().startupLesson||'recent')}</select><span class="field-note">Prepare playback without starting it.</span></div><div class="form-group"><label>Add to collections</label>${store.data.collections.map(c=>`<label style="display:flex;align-items:center;gap:9px;padding:6px 0"><input type="checkbox" data-collection-toggle="${attr(c.id)}" ${c.lessonIds.includes(l.id)?'checked':''} style="min-height:0">${esc(c.name)}</label>`).join('')||'<span class="micro">Create a collection first.</span>'}</div><div class="modal-footer" style="justify-content:space-between"><button class="btn danger" data-action="delete-lesson" data-id="${attr(l.id)}">${ico('trash')} Delete</button><span><button class="btn ghost" data-action="modal-close">Cancel</button> <button class="btn primary" data-action="save-lesson-meta">Save</button></span></div>`;}
 function practiceForm(l){const speakers=[...new Set(l.phrases.map(p=>p.speaker).filter(Boolean))];return `<div class="form-group"><label>Practise</label><select id="practice-selection">${selectOption([['all','All phrases'],['difficult','Difficult only'],['practised','Practised only'],['range','Selected range']],player.selection)}</select></div><div class="form-row practice-range-fields" ${player.selection==='range'?'':'hidden'}><div class="form-group"><label>From phrase</label><input id="range-start" type="number" min="1" max="${l.phrases.length}" value="${player.range?.[0]||1}"></div><div class="form-group"><label>To phrase</label><input id="range-end" type="number" min="1" max="${l.phrases.length}" value="${player.range?.[1]||l.phrases.length}"></div></div>${speakers.length?`<div class="form-group"><label>Speaker filter</label><select id="practice-speaker"><option value="">All speakers</option>${speakers.map(x=>`<option value="${attr(x)}" ${player.speakers.includes(x)?'selected':''}>${esc(x)}</option>`).join('')}</select></div>`:''}<div class="tip">Filters apply in Manual or Automatic mode.</div><div class="modal-footer"><button class="btn primary" data-action="apply-practice">Apply selection</button></div>`;}
 function optionsSheet(){
  const l=current(),p=player.current(),tab=ui.optionsTab||'playback';
@@ -279,30 +280,46 @@ function optionsSheet(){
  <div class="menu-setting"><label for="player-lead">Lead-in</label><select id="player-lead" data-pref="leadIn">${selectOption([[0,'None'],[.25,'0.25 s'],[.5,'0.5 s'],[1,'1 s'],[2,'2 s']],player.leadIn)}</select></div></div>
  <details id="player-pause-detail" class="option-group"><summary id="player-pause-summary">Speaking pause</summary><div class="menu-setting"><label for="player-pause">Type</label><select id="player-pause" data-pref="pauseType">${selectOption([['duration','Based on phrase'],['fixed','Fixed time']],pref().pauseType)}</select></div><div class="menu-setting"><label for="player-fixed">Fixed time</label><select id="player-fixed" data-pref="fixedPause">${selectOption([[2,'2 s'],[4,'4 s'],[6,'6 s'],[8,'8 s'],[12,'12 s']],pref().fixedPause)}</select></div><div class="menu-setting"><label for="player-multiplier">Duration multiplier</label><select id="player-multiplier" data-pref="multiplier">${selectOption([[1,'1×'],[1.5,'1.5×'],[2,'2×'],[2.5,'2.5×']],pref().multiplier)}</select></div></details>
  <div class="option-group"><div class="menu-setting"><label for="show-text-option">Show phrase text</label><input id="show-text-option" type="checkbox" data-pref="showText" ${pref().showText?'checked':''}></div><div class="menu-setting"><label>British English IPA</label><button class="text-link" data-action="show-ipa">Open pronunciation</button></div></div>
- <button class="menu-link" data-action="seek-tools">Seek within the recording ${ico('chevrondown')}</button>${store.mode==='conflict'?'<button class="menu-link" data-action="sync-details">Review sync conflict</button>':''}`;
+ <button class="menu-link" data-action="seek-tools">Seek within the recording ${ico('chevrondown')}</button>${store.mode==='conflict'?'<button class="menu-link" data-action="sync-details">Review sync conflict</button>':''} ${store.deviceDrafts.length?'<button class="menu-link" data-action="device-drafts">Review device copies</button>':''}`;
  return `${nav}<div class="options-content" role="tabpanel">${body}<div class="recording-tools"><p>Record your practice <small>Private to this browser session</small></p><button class="btn" data-action="record-practice" ${recorder.requesting?'disabled':''}>${recorder.requesting?'Requesting microphone…':recorder.recorder?.state==='recording'?'Stop recording':'Record yourself'}</button>${recorder.error?`<p role="alert">${esc(recorder.error)}</p>`:''}${recorder.url?`<audio controls src="${recorder.url}" aria-label="Your practice recording"></audio><a href="${recorder.url}" download="echo-practice.webm">Save recording</a>`:''}</div></div>`;
 }
-function speakingPromptSheet(prompt){
- const transfer=ui.modal.type==='transfer-prompt';
- return `<div class="modal-shade prompt-shade${transfer?' transfer-prompt-shade':''}" data-action="shade">
-   <section class="modal speaking-prompt" role="dialog" aria-modal="true" aria-labelledby="speaking-prompt-title" data-focus-dialog="app:${ui.modal.type}">
-     <div class="modal-head">
-       <h2 id="speaking-prompt-title" tabindex="-1" data-focus-initial>${esc(prompt.title)}</h2>
-       <button class="icon-btn" type="button" data-action="modal-close" aria-label="Close prompt">${ico('close')}</button>
+function transcriptPreview(phrases){
+ const row=p=>`<div class="preview-row"><time>${fmtTime(round(p.start),true)}–${fmtTime(round(p.end),true)}</time><span>${esc(p.text)}</span></div>`;
+ const clipped=phrases.length>40;
+ return `<h3 style="margin-top:17px">Preview · ${phrases.length} phrases</h3><div class="preview-list">${phrases.slice(0,clipped?39:40).map(row).join('')}${clipped?`<p class="micro preview-row">${phrases.length-40} intervening phrases · last phrase below</p>${row(phrases.at(-1))}`:''}</div>`;
+}
+function deviceDraftReview(){
+ const busy=ui.deviceDraftTask?'disabled':'';
+ const copies=store.deviceDrafts;
+ const description=store.deviceReviewRequired
+   ?'Account sync is paused. Choose which library copy to continue with. The other copies stay on this device.'
+   :'These pending copies are available on this device.';
+ return `<p class="muted">${description}</p>${ui.deviceDraftError?`<p role="alert">${esc(ui.deviceDraftError)}</p>`:''}
+  ${copies.length?`<div class="preview-list">${copies.map((copy,index)=>{
+   const time=copy.savedAt?new Date(copy.savedAt).toLocaleString('en-GB'):'Earlier device save';
+   const details=[time,`${copy.lessons} lessons`,`${copy.collections} collections`,`${copy.sessions} sessions`];
+   if(copy.title)details.push(`${copy.title} at ${fmtTime(copy.position??0)}`);
+   if(copy.theme)details.push(`${copy.theme} theme`);
+   return `<section class="preview-row device-draft" aria-label="Device copy ${index+1}">
+     <div><strong>Device copy ${index+1}</strong><p class="micro">${esc(details.join(' · '))}</p></div>
+     <div class="device-draft-actions">
+       <button class="btn" data-action="device-use" data-id="${attr(copy.id)}" ${busy}>Use this copy</button>
+       <button class="btn ghost" data-action="device-export" data-id="${attr(copy.id)}" ${busy}>Export copy</button>
+       <button class="btn ghost" data-action="device-discard" data-id="${attr(copy.id)}" ${busy}>Discard copy</button>
      </div>
-     <p class="prompt-situation">${esc(prompt.situation)}</p>
-     <p class="prompt-task">${esc(prompt.task)}</p>
-     <p class="prompt-note">${esc(prompt.note)}</p>
-     <div class="modal-footer"><button class="btn" type="button" data-action="modal-close">${esc(prompt.exit)}</button></div>
-   </section>
- </div>`;
+   </section>`;
+  }).join('')}</div>`:'<p>No pending device copies are available.</p>'}
+  <div class="modal-footer">
+   <button class="btn ghost" data-action="export" ${busy}>Export current library</button>
+   ${store.deviceReviewRequired?`<button class="btn primary" data-action="device-keep-working" ${busy}>Keep working copy</button>`:''}
+  </div>`;
 }
 function modal(){const m=ui.modal;let content='',title='',large=false;
- const prompt=activePrompt();if(prompt)return speakingPromptSheet(prompt);
  if(m.type==='add'||m.type==='replace'){
    title=m.type==='add'?'Create a lesson':'Replace transcript';large=true;
    const a=ui.import;
-   content=`<div class="steps"><span class="step-number">1</span> Add recording <span style="opacity:.4">→</span><span class="step-number">2</span> Transcript <span style="opacity:.4">→</span><span class="step-number">3</span> Preview & save</div>${m.type==='add'?`<div class="form-group"><label for="import-url">YouTube URL</label><input id="import-url" placeholder="https://www.youtube.com/watch?v=…" value="${attr(a.url)}"></div><div class="form-row"><div class="form-group"><label for="import-title">Lesson title</label><input id="import-title" value="${attr(a.title)}" placeholder="e.g. The art of speaking naturally"></div><div class="form-group"><label for="import-speaker">Speaker (optional)</label><input id="import-speaker" value="${attr(a.speaker)}" placeholder="e.g. Interview host"></div></div>`:''}<div class="form-group"><label for="transcript-text">Timestamped transcript</label><label class="upload-drop" for="transcript-file">${ico('upload')} <span><strong>${esc(a.fileName||'Choose TXT, SRT, VTT or JSON file')}</strong><span class="field-note" style="display:block">TXT, SRT, VTT or JSON. Upload a file or paste below.</span></span><input type="file" id="transcript-file" accept=".txt,.srt,.vtt,.json,text/plain,application/json"></label><textarea id="transcript-text" placeholder="1&#10;00:00:01,000 --> 00:00:04,000&#10;Hello and welcome…">${esc(a.text)}</textarea></div><div class="form-row"><div class="form-group"><label for="import-grouping">Phrase length</label><select id="import-grouping">${selectOption([['original','Original transcript cues'],['short','Short · 2–4 sec'],['balanced','Balanced · 4–8 sec'],['long','Long · 8–15 sec']],a.grouping)}</select></div><div class="form-group"><label for="import-offset">Global offset (seconds)</label><input type="number" step="0.1" id="import-offset" value="${a.offset}"></div></div>${a.errors?.length?`<div id="import-errors" role="alert" tabindex="-1">${a.errors.map(x=>`<div class="alert">${esc(x)}</div>`).join('')}</div>`:''}${a.warnings?.length?`<div class="tip">${a.warnings.slice(0,6).map(esc).join(' · ')}${a.warnings.length>6?` · +${a.warnings.length-6} more warnings`:''}</div>`:''}${a.preview?.length?`<h3 style="margin-top:17px">Preview · ${a.preview.length} phrases</h3><div class="preview-list">${a.preview.slice(0,40).map((p,i)=>`<div class="preview-row"><time>${fmtTime(p.start)}</time><span>${esc(p.text)}</span></div>`).join('')}${a.preview.length>40?'<div class="preview-row">More phrases available after saving</div>':''}</div>`:''}<div class="modal-footer"><button class="btn ghost" data-action="modal-close">Cancel</button><button class="btn" data-action="preview-import">${ico('eye')} Preview phrases</button><button class="btn primary" data-action="save-import" ${!a.preview?.length?'disabled':''}>${ico('check')} ${m.type==='add'?'Save & practise':'Replace transcript'}</button></div>`;
+   const errorAttrs=id=>a.errors?.length&&a.errorField===id?'aria-invalid="true" aria-describedby="import-errors"':'';
+   content=`<div class="steps"><span class="step-number">1</span> Add recording <span style="opacity:.4">→</span><span class="step-number">2</span> Transcript <span style="opacity:.4">→</span><span class="step-number">3</span> Preview & save</div>${m.type==='add'?`<div class="form-group"><label for="import-url">YouTube URL</label><input id="import-url" ${errorAttrs('import-url')} placeholder="https://www.youtube.com/watch?v=…" value="${attr(a.url)}"></div><div class="form-row"><div class="form-group"><label for="import-title">Lesson title</label><input id="import-title" value="${attr(a.title)}" placeholder="e.g. The art of speaking naturally"></div><div class="form-group"><label for="import-speaker">Speaker (optional)</label><input id="import-speaker" value="${attr(a.speaker)}" placeholder="e.g. Interview host"></div></div>`:''}<div class="form-group"><label for="transcript-text">Timestamped transcript</label><label class="upload-drop" for="transcript-file">${ico('upload')} <span><strong id="transcript-file-name">${esc(a.fileName||'Choose TXT, SRT, VTT or JSON file')}</strong><span id="transcript-file-formats" class="field-note" style="display:block">TXT, SRT, VTT or JSON. Upload a file or paste below.</span></span><input type="file" id="transcript-file" aria-label="Upload transcript file" aria-describedby="transcript-file-formats transcript-file-name" accept=".txt,.srt,.vtt,.json,text/plain,application/json"></label><textarea id="transcript-text" ${errorAttrs('transcript-text')} placeholder="1&#10;00:00:01,000 --> 00:00:04,000&#10;Hello and welcome…">${esc(a.text)}</textarea></div><div class="form-row"><div class="form-group"><label for="import-grouping">Phrase length</label><select id="import-grouping">${selectOption([['original','Original transcript cues'],['short','Short · 2–4 sec'],['balanced','Balanced · 4–8 sec'],['long','Long · 8–15 sec']],a.grouping)}</select></div><div class="form-group"><label for="import-offset">Global offset (seconds)</label><input type="number" step="0.1" id="import-offset" value="${a.offset}"></div></div><div id="import-review">${a.errors?.length?`<div id="import-errors" role="alert" tabindex="-1">${a.errors.map(x=>`<div class="alert">${esc(x)}</div>`).join('')}</div>`:''}${a.warnings?.length?`<div class="tip">${a.warnings.slice(0,6).map(esc).join(' · ')}${a.warnings.length>6?` · +${a.warnings.length-6} more warnings`:''}</div>`:''}${a.preview?.length?transcriptPreview(a.preview):''}</div><div class="modal-footer"><button class="btn ghost" data-action="modal-close">Cancel</button><button class="btn" data-action="preview-import" ${a.fileRead?'disabled':''}>${ico('eye')} Preview phrases</button><button class="btn primary" data-action="save-import" ${a.fileRead||!a.preview?.length?'disabled':''}>${ico('check')} ${m.type==='add'?'Save & practise':'Replace transcript'}</button></div>`;
  } else if(m.type==='player-settings'){
    title='Options';content=optionsSheet();
  } else if(m.type==='phrase-ipa'){
@@ -331,6 +348,8 @@ function modal(){const m=ui.modal;let content='',title='',large=false;
    title='Practice history';content=`${store.data.sessions.length?`<div class="preview-list" style="max-height:400px">${store.data.sessions.slice(0,100).map(s=>{const lesson=store.data.lessons.find(l=>l.id===s.lessonId);return `<div class="preview-row"><span style="flex:1"><strong>${esc(lesson?.title||'Deleted lesson')}</strong><div class="micro">${new Date(s.finishedAt||s.startedAt).toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})} · ${esc(s.mode)} · ${listeningDuration(s.activeSeconds)} listening</div></span><span class="micro">${s.metricsVersion===1?`${s.coveredIds.length} phrases heard`:'Earlier record'}</span></div>`;}).join('')}</div>`:'<div class="tip">No completed sessions yet. Use Finish session after practising to save a session.</div>'}<div class="modal-footer"><button class="btn" data-action="modal-close">Close</button></div>`;
  } else if(m.type==='playback-details'){
    title='Playback help';content=`<p class="muted">${esc(player.error||'Playback is not ready yet.')}</p><div class="modal-footer"><button class="btn ghost" data-action="modal-close">Close</button><button class="btn primary" data-action="retry-player">Retry playback</button></div>`;
+ } else if(m.type==='device-drafts'){
+   title='Review device copies';large=true;content=deviceDraftReview();
  } else if(m.type==='sync-details'){
    const problem=syncProblem(store);
    title=problem?.title??'Synchronisation';
@@ -343,12 +362,17 @@ function modal(){const m=ui.modal;let content='',title='',large=false;
  } else return '';
  return `<div class="modal-shade" data-action="shade"><section class="modal ${large?'large':''}" role="dialog" aria-modal="true" data-focus-dialog="app:${attr(m.type)}" ${m.type==='player-settings'?'data-focus-return="#player-options-toggle"':''} aria-label="${attr(title)}"><div class="modal-head"><h2>${title}</h2><button class="icon-btn" data-action="modal-close" aria-label="Close dialog">${ico('close')}</button></div>${content}</section></div>`;
 }
-function ensureAmbient(lesson){const data=store.data;prepareAmbient(lesson,palette=>{if(store.data===data&&data.lessons.includes(lesson))store.mutate(()=>{lesson.ambientPalette=palette;});});}
+function ensureAmbient(lesson){
+ const data=store.data;
+ prepareAmbient(lesson,palette=>{
+  if(store.data===data&&data.lessons.includes(lesson))store.mutate(()=>{lesson.ambientPalette=palette;});
+ },{allowYouTube:videoAllowed(lesson)&&!activePrompt()});
+}
 let shownPrompt=null;
 function isolateSpeakingPrompt(prompt){
  dock.inert=!!prompt;
  toaster.hidden=!!prompt;
- if(prompt)for(const child of root.children)child.inert=!child.classList.contains('prompt-shade');
+ if(prompt)for(const child of root.children)child.inert=child!==cueRegion.element;
 }
 function captureModalFields(){
  const fields=root.querySelectorAll('.modal input[id]:not([type=file]):not([data-pref]):not(#audio-offset):not(#player-loop),.modal textarea[id],.modal select[id]:not([data-pref]):not(#speed):not(#lesson-media-source)');
@@ -361,16 +385,16 @@ function render({recenterQueue=false}={}){
  const practiceFields=draft&&draft.lessonId===current()?.id&&ui.modal?.type==='player-settings'&&ui.optionsTab==='practice'?draft.fields:null;
  if(prompt!==shownPrompt){
   shownPrompt=prompt;
-  ui.practicePromptDraft=ui.modal?.type==='transfer-prompt'?{lessonId:current()?.id,fields:captureModalFields()}:null;
+  ui.practicePromptDraft=ui.modal?.type==='transfer-prompt'&&ui.modal.from!=='player'?{lessonId:current()?.id,fields:captureModalFields()}:null;
   if(prompt){
    ui.queueWasPlaying=false;
-   player.pauseForPrompt({save:ui.modal.type==='home-prompt'});
+   player.pauseForPrompt({save:prompt.kind==='home-prompt'});
   }else player.releasePrompt();
  }
  if(!store.owner){
   applyTheme();dock.className='youtube-dock dock-hidden';
   const checking=store.mode==='checking',focused=focus.capture();
-  root.innerHTML=`<main class="home-screen"><header class="home-appbar"><h1>Echo Studio</h1></header><section class="empty"><h2>${checking?'Connecting':'Library unavailable'}</h2><p role="status">${checking?'Checking your account…':'Connect and sign in to load your private library.'}</p><div class="home-start">${checking?'':'<button class="btn primary" data-action="retry-sync">Retry</button>'}${homePromptButton()}</div></section></main>${prompt?speakingPromptSheet(prompt):''}`;
+  cueRegion.render(`<main class="home-screen"><header class="home-appbar"><h1>Echo Studio</h1></header><section class="empty"><h2>${checking?'Connecting':'Library unavailable'}</h2><p role="status">${checking?'Checking your account…':'Connect and sign in to load your private library.'}</p><div class="home-start">${checking?'':'<button class="btn primary" data-action="retry-sync">Retry</button>'}${homePromptButton()}</div></section></main>`,prompt);
   isolateSpeakingPrompt(prompt);
   navigation.commit(captureRoute());
   focus.restore(focused);return;
@@ -384,7 +408,7 @@ function render({recenterQueue=false}={}){
  const focused=focus.capture();
  const horizontalPositions=new Map([...root.querySelectorAll('[data-scroll-key]')].map(el=>[el.dataset.scrollKey,el.scrollLeft]));
  const formValues=practiceFields??(ui.modal&&!['add','replace'].includes(ui.modal.type)?captureModalFields():[]);
- applyTheme();document.body.classList.toggle('view-home',ui.view==='home');document.body.classList.toggle('view-collections',ui.view==='collections');document.body.classList.toggle('view-settings',ui.view==='settings');document.body.classList.toggle('view-search',ui.view==='search');document.body.classList.toggle('has-compact-audio',!!current()&&ui.started&&!ui.compactDismissed&&ui.view!=='player');document.body.classList.toggle('view-player',ui.view==='player');document.documentElement.classList.toggle('view-player',ui.view==='player');document.body.classList.toggle('queue-open',ui.queue&&ui.view==='player');applyAmbient(current());if(ui.view==='player'&&current())ensureAmbient(current());document.body.classList.toggle('view-library',ui.view==='library'&&!ui.collectionId);document.body.classList.toggle('imported-player',ui.view==='player'&&!!current()?.importedAt);root.innerHTML=shell(ui.view==='home'?home():ui.view==='library'?library():ui.view==='collections'?collections():ui.view==='settings'?settings():ui.view==='search'?searchUI.view():playerView());dock.className=`youtube-dock ${current()&&!usesUploadedAudio(current())&&(ui.view==='player'||ui.started&&!ui.compactDismissed)?(ui.view==='player'?'':'dock-compact'):'dock-hidden'}`;const lyricsSlot=document.getElementById('lyrics-viewport');if(lyricsSlot)lyrics.mount(lyricsSlot,{lessonId:current().id,phrases:player.eligible(),currentId:player.current()?.id,activeHTML:phraseWords(player.current())});updateTimeline();layoutDock();schedulePlayerLayout();
+ applyTheme();document.body.classList.toggle('view-home',ui.view==='home');document.body.classList.toggle('view-collections',ui.view==='collections');document.body.classList.toggle('view-settings',ui.view==='settings');document.body.classList.toggle('view-search',ui.view==='search');document.body.classList.toggle('has-compact-audio',!!current()&&ui.started&&!ui.compactDismissed&&ui.view!=='player');document.body.classList.toggle('view-player',ui.view==='player');document.documentElement.classList.toggle('view-player',ui.view==='player');document.body.classList.toggle('queue-open',ui.queue&&ui.view==='player');applyAmbient(current());if(ui.view==='player'&&current())ensureAmbient(current());document.body.classList.toggle('view-library',ui.view==='library'&&!ui.collectionId);document.body.classList.toggle('imported-player',ui.view==='player'&&!!current()?.importedAt);cueRegion.render(shell(ui.view==='home'?home():ui.view==='library'?library():ui.view==='collections'?collections():ui.view==='settings'?settings():ui.view==='search'?searchUI.view():playerView()),prompt);dock.className=`youtube-dock ${videoAllowed(current())&&(ui.view==='player'||ui.started&&!ui.compactDismissed)?(ui.view==='player'?'':'dock-compact'):'dock-hidden'}`;const lyricsSlot=document.getElementById('lyrics-viewport');if(lyricsSlot)lyrics.mount(lyricsSlot,{lessonId:current().id,phrases:player.eligible(),currentId:player.current()?.id,activeHTML:phraseWords(player.current())});updateTimeline();layoutDock();schedulePlayerLayout();
  isolateSpeakingPrompt(prompt);
  const queueList=ui.queue&&root.querySelector('#queue-list');
  if(queueList){
@@ -400,7 +424,7 @@ function render({recenterQueue=false}={}){
  watchMore();navigation.commit(captureRoute());
  for(const el of root.querySelectorAll('[data-scroll-key]'))if(horizontalPositions.has(el.dataset.scrollKey))el.scrollLeft=horizontalPositions.get(el.dataset.scrollKey);
  watchShelves();
- for(const group of root.querySelectorAll('.form-group')){const label=group.querySelector('label'),control=group.querySelector('input[id],select[id],textarea[id]');if(label&&control)label.htmlFor=control.id;}
+ for(const group of root.querySelectorAll('.form-group')){const label=group.querySelector('label'),control=group.querySelector('input[id],select[id],textarea[id]');if(label&&control&&!label.htmlFor)label.htmlFor=control.id;}
  for(const field of formValues){const e=document.getElementById(field.id);if(e){e.value=field.value;if(e.type==='checkbox')e.checked=field.checked;}}
  const rangeFields=document.querySelector('.practice-range-fields');if(rangeFields)rangeFields.hidden=document.getElementById('practice-selection')?.value!=='range';
  focus.restore(focused);
@@ -421,7 +445,7 @@ let playerLayoutFrame=0;
 function schedulePlayerLayout(){if(playerLayoutFrame)return;playerLayoutFrame=requestAnimationFrame(()=>{playerLayoutFrame=0;fitPhrase();layoutDock();});}
 function fitPhrase(){lyrics.layout();}
 function layoutDock(){
- const slot=usesUploadedAudio(current())?null:ui.view==='player'?document.querySelector('#video-slot'):document.querySelector('.compact-video-slot');
+ const slot=!videoAllowed(current())?null:ui.view==='player'?document.querySelector('#video-slot'):document.querySelector('.compact-video-slot');
  if(slot&&current()){
    const r=slot.getBoundingClientRect();
    Object.assign(dock.style,{top:r.top+'px',left:r.left+'px',width:r.width+'px',height:r.height+'px',right:'auto',bottom:'auto'});
@@ -451,7 +475,7 @@ function updateTimeline(){
  for(const f of document.querySelectorAll('#recording-clock,#dialog-recording-clock'))f.textContent=`${fmtTime(displayTime)} / ${fmtTime(player.duration||current().phrases.at(-1)?.end||0)}`;
  if(p?.words){const words=document.querySelectorAll('#active-phrase .word');const selected=new Set(activeWordIndices(p,displayTime));words.forEach((n,i)=>n.classList.toggle('current-word',selected.has(i)));}
 }
-function openLesson(id,{completeImport=false}={}){
+function openLesson(id,{completeImport=false,activateYouTube=true}={}){
  const lesson=store.data.lessons.find(l=>l.id===id);
  if(!lesson)return toast('Lesson not found');
  ui.compactDismissed=false;mirror.exit();recorder.stop();ui.started=true;
@@ -460,6 +484,8 @@ function openLesson(id,{completeImport=false}={}){
   const previous=player.finishSession();
   if(previous)store.mutate(data=>data.sessions.unshift(previous));
  }
+ if(usesUploadedAudio(lesson))ui.allowedVideo=null;
+ else if(activateYouTube)ui.allowedVideo=lesson.videoId;
  if(current()?.id!==id||!player.ready)player.load(lesson,pref());
  // Loading and saving can render synchronously. Clear the import sheet only
  // when the destination is ready to replace its history entry.
@@ -467,7 +493,7 @@ function openLesson(id,{completeImport=false}={}){
  if(completeImport)ui.modal=null;
  ui.queue=!mobileLayout()&&!!pref().queueOpen;ui.word=null;
  if(store.data.lastLessonId!==id)store.mutate(data=>{data.lastLessonId=id;});
- window.scrollTo(0,0);render();player.initialise();
+ window.scrollTo(0,0);render();initialiseSource(lesson);
 }
 function saveProgress(reason='transition'){
  const lesson=current();
@@ -492,8 +518,34 @@ function saveProgress(reason='transition'){
 function changePref(name,value){if(name==='showText'||name==='showIPA'||name==='wakeLock'||name==='reduceMotion')value=!!value;else if(['speed','leadIn','fixedPause','multiplier'].includes(name))value=Number(value);store.mutate(d=>{d.preferences[name]=value;});if(name==='mode'&&player.mode!==value)player.setMode(value);if(name==='leadIn')player.setLeadIn(value);if(['pauseType','fixedPause','multiplier'].includes(name))player.config[name]=value;if(name==='wakeLock')updateWake();render();}
 let wakeLock=null;async function updateWake(){try{if(pref().wakeLock&&current()&&ui.view==='player'&&player.playing&&'wakeLock' in navigator&&!document.hidden){if(!wakeLock||wakeLock.released)wakeLock=await navigator.wakeLock.request('screen');}else if(wakeLock){await wakeLock.release();wakeLock=null;}}catch(e){wakeLock=null;}}
 function saveRevision(l){l.revisions=l.revisions||[];l.revisions.push({phrases:structuredClone(l.phrases),statuses:structuredClone(l.statuses),grouping:l.grouping,segments:structuredClone(l.segments),source:l.source,format:l.format,offset:l.offset,at:Date.now()});if(l.revisions.length>4)l.revisions.shift();}
-function previewImport(){try{const a=ui.import;if(ui.modal.type==='add')urlToVideoId(a.url);const parsed=parseTranscript(a.text,a.fileName),v=validateSegments(parsed.segments,ui.modal.type==='replace'?current()?.duration:null,Number(a.offset)||0);a.errors=[...parsed.problems,...v.errors];a.warnings=[...(parsed.warnings||[]),...v.warnings];a.preview=a.errors.length?[]:groupPhrases(v.segments,a.grouping);a.segments=v.segments;a.format=parsed.format;if(a.preview.length===0&&!a.errors.length)a.errors.push('No speaking phrases could be created.');}catch(e){ui.import.preview=null;ui.import.errors=[e.message];ui.import.warnings=[];}render();root.querySelector('#import-errors')?.focus();}
-function saveImport(){const a=ui.import;if(!a.preview?.length)return toast('Preview the transcript first.');if(ui.modal.type==='add'){
+function invalidateImportPreview(draft){
+ if(!draft.preview&&!draft.errors.length&&!draft.warnings.length)return;
+ draft.preview=null;draft.errors=[];draft.warnings=[];
+ const review=root.querySelector('#import-review'),save=root.querySelector('[data-action="save-import"]');
+ review?.replaceChildren();
+ if(save)save.disabled=true;
+ for(const field of root.querySelectorAll('[aria-describedby="import-errors"]')){
+  field.removeAttribute('aria-invalid');field.removeAttribute('aria-describedby');
+ }
+}
+function previewImport(){
+ const a=ui.import;
+ if(a.fileRead)return;
+ a.errorField='import-url';
+ try{
+  if(ui.modal.type==='add')urlToVideoId(a.url);
+  a.errorField='transcript-text';
+  const parsed=parseTranscript(a.text,a.fileName);
+  const checked=validateSegments(parsed.segments,ui.modal.type==='replace'?current()?.duration:null,Number(a.offset)||0);
+  a.errors=[...parsed.problems,...checked.errors];a.warnings=[...(parsed.warnings||[]),...checked.warnings];
+  a.preview=a.errors.length?null:groupPhrases(checked.segments,a.grouping);
+  a.segments=checked.segments;a.format=parsed.format;
+  if(!a.preview?.length&&!a.errors.length)a.errors.push('No speaking phrases could be created.');
+ }catch(error){a.preview=null;a.errors=[error.message];a.warnings=[];}
+ render();
+ root.querySelector('#import-errors')?.focus();
+}
+function saveImport(){const a=ui.import;if(a.fileRead||!a.preview?.length)return toast('Preview the transcript first.');if(ui.modal.type==='add'){
    const id=urlToVideoId(a.url);
    const lesson=createLesson(id,a.title.trim()||`YouTube lesson ${id}`,a.text,a.format,a.segments,a.preview,a.grouping,Number(a.offset)||0,a.speaker.trim());
    // This explicit open owns player preparation, even for a first lesson.
@@ -504,9 +556,12 @@ function saveImport(){const a=ui.import;if(!a.preview?.length)return toast('Prev
  }else{const l=current();if(!confirm('Replace this transcript? Your most recent version can be restored using Undo.'))return;store.mutate(()=>{saveRevision(l);const rem=remapStatuses(l.phrases,a.preview,l.statuses);l.phrases=a.preview;l.statuses=rem.statuses;l.segments=a.segments;l.source=a.text;l.format=a.format;l.grouping=a.grouping;l.offset=Number(a.offset)||0;l.progress.phraseId=a.preview[0]?.id;l.progress.position=a.preview[0]?.start||0;l.updatedAt=Date.now();});player.load(l,pref());ui.modal=null;render();toast('Transcript replaced. Previous version available via Undo.');}}
 function showRegroup(mode){const l=current();const newP=groupPhrases(l.segments,mode),rem=remapStatuses(l.phrases,newP,l.statuses);ui.modal={type:'regroup',grouping:mode,preview:newP,remap:rem};render();}
 function modifyPhrase(fn,msg){const l=current();if(!l)return;ui.modal=null;ui.queueMenu=null;store.mutate(()=>{saveRevision(l);fn(l);l.phrases.sort((a,b)=>a.start-b.start);l.updatedAt=Date.now();});const id=player.current()?.id;if(!l.phrases.some(p=>p.id===id))player.seekPhrase(l.phrases[0]?.id,false);ui.queueMenu=null;ui.modal=null;render();toast(msg);}
-function reloadSource(lesson){mirror.exit();
+function reloadSource(lesson,{activateYouTube=false}={}){
+ mirror.exit();
  if(current()?.id!==lesson.id)return;
- player.pause();player.load(lesson,pref());player.initialise();
+ if(usesUploadedAudio(lesson))ui.allowedVideo=null;
+ else if(activateYouTube)ui.allowedVideo=lesson.videoId;
+ player.pause();player.load(lesson,pref());initialiseSource(lesson);
 }
 async function uploadLessonAudio(file,id){
  if(ui.uploading)return;const dataAtStart=store.data,owner=store.owner,lesson=dataAtStart.lessons.find(l=>l.id===id);if(!owner||!lesson)return;
@@ -541,16 +596,35 @@ function cleanupAudio(){
  const data=store.data,owner=store.owner;
  if(cleanupTask||!owner||store.mode!=='cloud'||store.pending)return;
  const refs=mediaReferences(data);
+ for(const url of store.deviceDraftMediaReferences())refs.add(url);
  const files=(data.pendingAudioDeletes||[]).filter(url=>isManagedMediaPath(url)&&!refs.has(url));
  if(!files.length)return;
  const task={};cleanupTask=task;
- (async()=>{const removed=[];try{for(const url of files){if(store.data!==data)break;const response=await store.ownedFetch(url,{method:'DELETE'},owner);if(response.ok||response.status===409)removed.push(url);}if(store.data===data&&removed.length)store.mutate(d=>{d.pendingAudioDeletes=(d.pendingAudioDeletes||[]).filter(x=>!removed.includes(x));});}catch{}finally{if(cleanupTask===task){cleanupTask=null;if((store.data.pendingAudioDeletes||[]).length){clearTimeout(cleanupTimer);cleanupTimer=setTimeout(cleanupAudio,30000);}}}})();
+ (async()=>{
+  const removed=[];
+  try{
+   for(const url of files){
+    if(store.data!==data||store.pending||store.mode!=='cloud')break;
+    if(!await store.refreshDeviceDrafts({complete:true}))break;
+    if(store.data!==data||store.pending||store.mode!=='cloud')break;
+    if(store.deviceDraftMediaReferences().has(url))continue;
+    const response=await store.ownedFetch(url,{method:'DELETE'},owner);
+    if(response.ok||response.status===409)removed.push(url);
+   }
+   if(store.data===data&&removed.length)store.mutate(d=>{d.pendingAudioDeletes=(d.pendingAudioDeletes||[]).filter(x=>!removed.includes(x));});
+  }catch{}finally{
+   if(cleanupTask===task){
+    cleanupTask=null;
+    if((store.data.pendingAudioDeletes||[]).length){clearTimeout(cleanupTimer);cleanupTimer=setTimeout(cleanupAudio,30000);}
+   }
+  }
+ })();
 }
 function prepareStartup(){
  if(ui.started||ui.preparing)return;const choice=pref().startupLesson??'recent';if(choice==='none')return;
  const id=choice==='recent'?store.data.lastLessonId:choice;
  const lesson=store.data.lessons.find(l=>l.id===id)||(choice==='recent'?store.data.lessons[0]:null);
- if(lesson){ui.preparing=true;player.load(lesson,pref());player.initialise();}
+ if(lesson&&usesUploadedAudio(lesson)){ui.preparing=true;player.load(lesson,pref());initialiseSource(lesson);}
 }
 function finishSession(){player.pause();const s=player.finishSession();if(!s){toast('Play a phrase to begin a practice session.');return;}store.mutate(d=>{d.sessions.unshift(s);d.sessions=d.sessions.slice(0,20000);});ui.modal={type:'summary',session:s};ui.queue=false;render();}
 function onPlayerChange(){
@@ -560,6 +634,7 @@ function onPlayerChange(){
 }
 let visibleOwner=null;
 function clearActivePlayer(){
+ ui.allowedVideo=null;
  player.destroy();
  Object.assign(player,{lesson:null,phrase:null,yt:null,ready:false,initialising:null,mediaIdentity:'',session:null,playing:false,wantsPlayback:false,state:'idle',error:''});
  player.resetHost();
@@ -588,7 +663,7 @@ store.onChange=()=>{
  if(!store.owner){render();return;}
  if(current()){
    const saved=store.data.lessons.find(l=>l.id===current().id);
-   if(saved&&saved!==current()){renderImmediately=true;player.load(saved,pref());player.initialise();}
+   if(saved&&saved!==current()){renderImmediately=true;player.load(saved,pref());initialiseSource(saved);}
    else if(!saved){renderImmediately=true;clearActivePlayer();mirror.exit();recorder.stop();if(ui.view==='player'){ui.view='library';if(ui.modal?.type==='transfer-prompt')ui.modal=null;}}
  }
  prepareStartup();cleanupAudio();
@@ -611,13 +686,39 @@ async function restoreBackup(file){
  }
 }
 function getVal(id){return document.getElementById(id)?.value;}
-function openSpeakingPrompt(type){
+function openSpeakingPrompt(type,from){
  if(!navigation.ready)navigation.start(captureRoute(),false);
- ui.modal={type};render();
+ ui.modal={type,from};render();
 }
 function closeModal(){
  if(activePrompt()){navigation.back();return;}
  recorder.stop();ui.modal=null;ui.word=null;render();
+}
+function downloadBackup(text,filename){
+ const url=URL.createObjectURL(new Blob([text],{type:'application/json'}));
+ const link=document.createElement('a');
+ link.href=url;link.download=filename;link.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+async function changeDeviceDraft(choice,id){
+ if(ui.deviceDraftTask||ui.modal?.type!=='device-drafts')return;
+ if(choice==='discard'&&!confirm('Discard this pending device copy? Export it first if you want a backup.'))return;
+ const task={};
+ ui.deviceDraftTask=task;
+ ui.deviceDraftError='';
+ render();
+ try {
+  const accepted=choice==='keep'?await store.keepWorkingCopy():
+   choice==='use'?await store.useDeviceDraft(id):await store.discardDeviceDraft(id);
+  if(ui.deviceDraftTask!==task||ui.modal?.type!=='device-drafts')return;
+  if(accepted===false){
+   ui.deviceDraftError='This device copy could not be changed. Export your current library before trying again.';
+  }else if(choice!=='discard')closeModal();
+ }catch{
+  if(ui.deviceDraftTask===task)ui.deviceDraftError='Device copies are unavailable. Export your current library before closing this tab.';
+ }finally{
+  if(ui.deviceDraftTask===task){ui.deviceDraftTask=null;render();}
+ }
 }
 function collectImportInputs(){const a=ui.import;if(ui.modal?.type==='add'){a.url=getVal('import-url')??a.url;a.title=getVal('import-title')??a.title;a.speaker=getVal('import-speaker')??a.speaker;}a.text=getVal('transcript-text')??a.text;a.grouping=getVal('import-grouping')??a.grouping;a.offset=Number(getVal('import-offset')??a.offset);}
 function action(name,data,e){
@@ -626,9 +727,15 @@ function action(name,data,e){
  if(!store.owner&&!dismissDialog&&name!=='retry-sync'&&name!=='home-speaking-prompt')return;
  const l=current();if(mirror.active&&['toggle','next','prev','replay','reset-phrase','select-phrase','lyric-select','queue-replay','queue','player-settings','settings-shortcut','show-ipa','word','seek-tools','mode','record-practice','remove-audio'].includes(name))mirror.exit();switch(name){
  case 'home-speaking-prompt':if(ui.view==='home'&&!ui.modal&&!libraryUI.dialog&&!collectionsUI.dialog&&!mirror.panelOpen)openSpeakingPrompt('home-prompt');break;
- case 'practice-transfer-prompt':
-   if(ui.view==='player'&&ui.modal?.type==='player-settings'&&ui.optionsTab==='practice'&&player.current()&&!recorder.requesting&&recorder.recorder?.state!=='recording')openSpeakingPrompt('transfer-prompt');
+ case 'practice-transfer-prompt': {
+   if(ui.view!=='player'||recorder.requesting||recorder.recorder?.state==='recording')break;
+   if(data.from==='player'&&!ui.modal&&!(ui.queue&&mobileLayout())&&canTransferFromPlayer()){
+     openSpeakingPrompt('transfer-prompt','player');
+   }else if(ui.modal?.type==='player-settings'&&ui.optionsTab==='practice'&&player.current()){
+     openSpeakingPrompt('transfer-prompt','options');
+   }
    break;
+ }
  case 'home-category':ui.homeCategory=data.category||'';render();break;
  case 'home-categories':libraryUI.action('taxonomy');break;
  case 'home-course-options':libraryUI.action('menu',{kind:'c',id:data.id});break;
@@ -670,7 +777,10 @@ function action(name,data,e){
  }
  case 'lyrics-follow':lyrics.follow();break;
  case 'lyric-select':lyrics.following=true;player.seekPhrase(data.id,false);player.play();render();break;
- case 'retry-player':player.retry();break;
+ case 'load-youtube':
+   if(ui.view==='player'&&videoAwaitingChoice(l)){ui.allowedVideo=l.videoId;render();initialiseSource(l);}
+   break;
+ case 'retry-player':if(l&&(usesUploadedAudio(l)||videoAllowed(l)))player.retry();break;
  case 'reset-phrase':lyrics.following=true;player.replay();break;
  case 'remove-audio':removeLessonAudio(data.id);break;
  case 'preview-audio-source':{const lesson=store.data.lessons.find(l=>l.id===data.id);if(current()?.id!==lesson.id){openLesson(lesson.id);ui.modal={type:'lesson-actions',id:lesson.id};}player.replay();break;}
@@ -728,7 +838,20 @@ function action(name,data,e){
  case 'delete-lesson':ui.modal={type:'confirm-delete',id:data.id};render();break;
  case 'delete-confirm':{const id=ui.modal.id;store.mutate(d=>removeLesson(d,id));closeModal();ui.view='library';render();toast('Lesson removed.');break;}
  case 'clear-collection':ui.collectionId=null;render();break;
- case 'export':{const blob=new Blob([store.export()],{type:'application/json'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`echo-studio-backup-${new Date().toISOString().slice(0,10)}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);break;}
+ case 'export':downloadBackup(store.export(),`echo-studio-backup-${new Date().toISOString().slice(0,10)}.json`);break;
+ case 'device-drafts':
+   if(!ui.deviceDraftTask){ui.deviceDraftError='';ui.modal={type:'device-drafts'};render();store.refreshDeviceDrafts();}
+   break;
+ case 'device-use':changeDeviceDraft('use',data.id);break;
+ case 'device-discard':changeDeviceDraft('discard',data.id);break;
+ case 'device-keep-working':changeDeviceDraft('keep');break;
+ case 'device-export':{
+   if(ui.modal?.type!=='device-drafts'||ui.deviceDraftTask)break;
+   const dataJSON=store.exportDeviceDraft(data.id);
+   if(dataJSON)downloadBackup(dataJSON,`echo-studio-device-copy-${new Date().toISOString().slice(0,10)}.json`);
+   else{ui.deviceDraftError='This device copy is no longer available.';render();}
+   break;
+ }
  case 'dismiss-sync':ui.syncDismissed=syncIssueKey(store);render();[...root.querySelectorAll('.home-appbar button,#library-search-toggle,.topbar button,.player-back')].find(el=>el.getClientRects().length)?.focus({preventScroll:true});break;
  case 'retry-sync':if(!ui.syncRetrying){ui.syncRetrying=true;render();store.retry().finally(()=>{ui.syncRetrying=false;render();});}break;
  case 'conflict-cloud':ui.modal=null;store.resolveConflict(false);toast('Loaded the newer cloud copy.');break;
@@ -738,11 +861,36 @@ root.addEventListener('focusin',e=>{
  const row=e.target.closest('.phrase-row');
  if(row)holdQueuePage(row.closest('#queue-list'));
 });
-root.addEventListener('error',e=>{const image=e.target;if(image.tagName!=='IMG'||!image.closest('.shelf-art,.library-art,.compact-art,.import-preview')||image.dataset.fallback)return;image.dataset.fallback='true';image.src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="140" viewBox="0 0 120 140"><rect width="120" height="140" fill="#30343b"/><g stroke="#bcc1cb" stroke-width="4" stroke-linecap="round"><path d="M40 64v12M50 54v32M60 46v48M70 54v32M80 64v12"/></g></svg>');},true);
+root.addEventListener('error',e=>{const image=e.target;if(image.tagName!=='IMG'||image.dataset.fallback)return;
+ if(image.matches('.player-artwork')){image.hidden=true;return;}
+ if(!image.closest('.shelf-art,.library-art,.compact-art,.import-preview,.player-source-art'))return;image.dataset.fallback='true';image.src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="140" viewBox="0 0 120 140"><rect width="120" height="140" fill="#30343b"/><g stroke="#bcc1cb" stroke-width="4" stroke-linecap="round"><path d="M40 64v12M50 54v32M60 46v48M70 54v32M80 64v12"/></g></svg>');},true);
 root.addEventListener('click',e=>{const t=e.target.closest('[data-action]');if(!t)return;if(t.dataset.action==='shade'&&!e.target.classList.contains('modal-shade'))return;e.stopPropagation();action(t.dataset.action,t.dataset,e);});
 root.addEventListener('keydown',e=>{if(e.target.matches('.shelf-track')&&['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();e.stopPropagation();const track=e.target;track.scrollLeft=e.key==='Home'?0:e.key==='End'?track.scrollWidth:track.scrollLeft+(e.key==='ArrowRight'?1:-1)*track.clientWidth*.8;return;}if(e.target.matches('[role=tab]')&&['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();e.stopPropagation();const tabs=['playback','practice','lesson'];const i=tabs.indexOf(ui.optionsTab);ui.optionsTab=e.key==='Home'?tabs[0]:e.key==='End'?tabs[2]:tabs[(i+(e.key==='ArrowRight'?1:2))%3];render();root.querySelector('[role=tab][aria-selected=true]')?.focus({preventScroll:true});return;}if((e.key==='Enter'||e.key===' ')&&e.target.matches('[role="button"][data-action]')){e.preventDefault();action(e.target.dataset.action,e.target.dataset,e);}});
-root.addEventListener('input',e=>{const t=e.target;if(t.id==='library-search'){if(ui.view==='home')ui.view='library';ui.search=t.value;libraryUI.state.query=t.value;const pos=t.selectionStart;render();const field=document.getElementById('library-search');field?.focus();field?.setSelectionRange(pos,pos);}if(['import-url','import-title','import-speaker','transcript-text','import-offset','import-grouping'].includes(t.id)){const a=ui.import;if(t.id==='import-url')a.url=t.value;if(t.id==='import-title')a.title=t.value;if(t.id==='import-speaker')a.speaker=t.value;if(t.id==='transcript-text')a.text=t.value;if(t.id==='import-offset')a.offset=Number(t.value);if(t.id==='import-grouping')a.grouping=t.value;a.preview=null;}if(t.id==='phrase-seek'||t.id==='dialog-phrase-seek'){t.style.setProperty('--progress',`${Number(t.value)/Number(t.max)*100}%`);updatePhraseClocks(Number(t.value),Number(t.max));}});
-root.addEventListener('change',async e=>{const t=e.target;if(t.id==='queue-page'){holdQueuePage(root.querySelector('#queue-list'),Number(t.value));ui.queueMenu=null;render();return;}if(t.id==='practice-selection'){const range=document.querySelector('.practice-range-fields');if(range)range.hidden=t.value!=='range';return;}if(t.id==='lesson-audio-file'&&t.files?.[0]){uploadLessonAudio(t.files[0],t.dataset.lessonId);return;}if(t.id==='lesson-media-source'||t.id==='audio-offset'){const lesson=store.data.lessons.find(l=>l.id===t.dataset.lessonId);if(!lesson)return;if(t.id==='audio-offset'&&!Number.isFinite(Number(t.value)))return;store.mutate(()=>{if(t.id==='audio-offset')lesson.audioOffset=Number(t.value);else lesson.mediaSource=t.value;});reloadSource(lesson);return;}if(t.dataset.pref){changePref(t.dataset.pref,t.type==='checkbox'?t.checked:t.value);return;}if(t.id==='transcript-file'&&t.files?.[0]){const f=t.files[0];if(f.size>5_000_000)return toast('Transcript file must be under 5 MB.');const draft=ui.import,text=await f.text();if(ui.import!==draft)return;draft.text=text;draft.fileName=f.name;draft.preview=null;render();toast(`${f.name} ready to preview.`);return;}if(t.id==='restore-file'&&t.files?.[0]){const file=t.files[0];t.value='';await restoreBackup(file);return;}if(t.id==='library-filter'){ui.libraryFilter=t.value;render();}if(t.id==='library-sort'){ui.sort=t.value;render();}if(t.id==='speed'){const rate=Number(t.value);if(player.setSpeed(rate))changePref('speed',rate);}if(t.id==='phrase-seek'||t.id==='dialog-phrase-seek'){const p=player.current();player.seekRecording((p?.start||0)+Number(t.value),player.playing);}if(t.id==='recording-seek'||t.id==='dialog-recording-seek')player.seekRecording(Number(t.value),player.playing);if(t.id==='regroup-mode')showRegroup(t.value);});
+root.addEventListener('input',e=>{const t=e.target;if(t.id==='library-search'){if(ui.view==='home')ui.view='library';ui.search=t.value;libraryUI.state.query=t.value;const pos=t.selectionStart;render();const field=document.getElementById('library-search');field?.focus();field?.setSelectionRange(pos,pos);}if(['import-url','import-title','import-speaker','transcript-text','import-offset','import-grouping'].includes(t.id)){const a=ui.import;if(t.id==='import-url')a.url=t.value;if(t.id==='import-title')a.title=t.value;if(t.id==='import-speaker')a.speaker=t.value;if(t.id==='transcript-text'){
+ a.text=t.value;
+ if(a.fileRead){
+  a.fileRead=null;
+  const preview=root.querySelector('[data-action="preview-import"]');
+  if(preview)preview.disabled=false;
+ }
+}if(t.id==='import-offset')a.offset=Number(t.value);if(t.id==='import-grouping')a.grouping=t.value;invalidateImportPreview(a);}if(t.id==='phrase-seek'||t.id==='dialog-phrase-seek'){t.style.setProperty('--progress',`${Number(t.value)/Number(t.max)*100}%`);updatePhraseClocks(Number(t.value),Number(t.max));}});
+async function readTranscriptFile(file){
+ const draft=ui.import,read={};
+ draft.fileRead=read;
+ invalidateImportPreview(draft);
+ const preview=root.querySelector('[data-action="preview-import"]');
+ if(preview)preview.disabled=true;
+ let text;
+ try{text=await file.text();}
+ catch{text=null;}
+ if(ui.import!==draft||draft.fileRead!==read)return;
+ draft.fileRead=null;
+ if(!['add','replace'].includes(ui.modal?.type))return;
+ if(text!==null){draft.text=text;draft.fileName=file.name;}
+ render();
+ toast(text===null?'This transcript file could not be read. Choose it again or paste the transcript.':`${file.name} ready to preview.`);
+}
+root.addEventListener('change',async e=>{const t=e.target;if(t.id==='queue-page'){holdQueuePage(root.querySelector('#queue-list'),Number(t.value));ui.queueMenu=null;render();return;}if(t.id==='practice-selection'){const range=document.querySelector('.practice-range-fields');if(range)range.hidden=t.value!=='range';return;}if(t.id==='lesson-audio-file'&&t.files?.[0]){uploadLessonAudio(t.files[0],t.dataset.lessonId);return;}if(t.id==='lesson-media-source'||t.id==='audio-offset'){const lesson=store.data.lessons.find(l=>l.id===t.dataset.lessonId);if(!lesson)return;if(t.id==='audio-offset'&&!Number.isFinite(Number(t.value)))return;store.mutate(()=>{if(t.id==='audio-offset')lesson.audioOffset=Number(t.value);else lesson.mediaSource=t.value;});reloadSource(lesson,{activateYouTube:t.id==='lesson-media-source'&&t.value==='youtube'&&ui.view==='player'});return;}if(t.dataset.pref){changePref(t.dataset.pref,t.type==='checkbox'?t.checked:t.value);return;}if(t.id==='transcript-file'&&t.files?.[0]){const f=t.files[0];if(f.size>5_000_000)return toast('Transcript file must be under 5 MB.');await readTranscriptFile(f);return;}if(t.id==='restore-file'&&t.files?.[0]){const file=t.files[0];t.value='';await restoreBackup(file);return;}if(t.id==='library-filter'){ui.libraryFilter=t.value;render();}if(t.id==='library-sort'){ui.sort=t.value;render();}if(t.id==='speed'){const rate=Number(t.value);if(player.setSpeed(rate))changePref('speed',rate);}if(t.id==='phrase-seek'||t.id==='dialog-phrase-seek'){const p=player.current();player.seekRecording((p?.start||0)+Number(t.value),player.playing);}if(t.id==='recording-seek'||t.id==='dialog-recording-seek')player.seekRecording(Number(t.value),player.playing);if(t.id==='regroup-mode')showRegroup(t.value);});
 let touchStart=null,suppressPhraseClickUntil=0;
 root.addEventListener('click',e=>{if(Date.now()<suppressPhraseClickUntil&&e.target.closest('.phrase-panel,#swipe-zone')){e.preventDefault();e.stopImmediatePropagation();}},true);
 root.addEventListener('touchstart',e=>{touchStart=e.target.closest('.phrase-panel,#swipe-zone')&&e.touches.length===1&&!ui.modal&&!ui.queue?{x:e.touches[0].clientX,y:e.touches[0].clientY}:null;},{passive:true});
@@ -763,9 +911,9 @@ document.addEventListener('keydown',e=>{
  if(command==='queue')focus.rememberInvoker(root.querySelector('#phrase-queue-toggle'));
  e.preventDefault();action(command,{},e);
 });
-let originalScroll=0;document.addEventListener('visibilitychange',()=>{if(document.hidden){if(mirror.active)mirror.exit();recorder.stop();saveProgress('background');if(wakeLock)wakeLock.release().catch(()=>{});}else{updateWake();store.connect();}});addEventListener('online',()=>store.connect());addEventListener('pageshow',event=>{if(event.persisted)store.connect();});addEventListener('focus',()=>{if(!document.hidden)store.connect();});addEventListener('scroll',layoutDock,{passive:true,capture:true});addEventListener('resize',schedulePlayerLayout);window.visualViewport?.addEventListener('resize',schedulePlayerLayout);new ResizeObserver(schedulePlayerLayout).observe(root);document.fonts?.ready.then(schedulePlayerLayout);addEventListener('beforeunload',()=>{recorder.reset();mirror.dispose();saveProgress('background');});matchMedia('(prefers-color-scheme: light)').addEventListener('change',()=>{if(pref().theme==='system')applyTheme();});
+let originalScroll=0;document.addEventListener('visibilitychange',()=>{if(document.hidden){if(mirror.active)mirror.exit();recorder.stop();saveProgress('background');if(wakeLock)wakeLock.release().catch(()=>{});}else{updateWake();store.connect();}});addEventListener('online',()=>store.connect());addEventListener('pageshow',event=>{if(event.persisted)store.connect();});addEventListener('focus',()=>{if(!document.hidden)store.connect();});addEventListener('scroll',layoutDock,{passive:true,capture:true});addEventListener('resize',schedulePlayerLayout);window.visualViewport?.addEventListener('resize',schedulePlayerLayout);new ResizeObserver(schedulePlayerLayout).observe(root);document.fonts?.ready.then(schedulePlayerLayout);addEventListener('beforeunload',()=>{ui.allowedVideo=null;recorder.reset();mirror.dispose();saveProgress('background');});matchMedia('(prefers-color-scheme: light)').addEventListener('change',()=>{if(pref().theme==='system')applyTheme();});
 if('serviceWorker'in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('/sw.js').catch(()=>{});
-render();store.init().then(()=>{if(!navigation.ready)navigation.start(captureRoute());prepareStartup();if(store.owner&&!current()&&pref().startupLesson!=='none')warmYouTube();});
+render();store.init().then(()=>{if(!navigation.ready)navigation.start(captureRoute());prepareStartup();});
 
 let compactTouch=null;
 root.addEventListener('touchstart',e=>{const bar=e.target.closest('.compact-player');compactTouch=bar&&e.touches.length===1?{x:e.touches[0].clientX,y:e.touches[0].clientY}:null;},{passive:true});

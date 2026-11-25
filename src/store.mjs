@@ -3,12 +3,12 @@ import {restoreOriginalPlayback} from './playback-recovery.mjs';
 import {migrateLibrary} from './courses.mjs';
 import {uid} from './transcript.mjs';
 import {validateSnapshot} from './snapshot.mjs';
-import {queueUnreferencedMedia} from './library-mutations.mjs';
+import {mediaReferences, queueUnreferencedMedia} from './library-mutations.mjs';
 import {MAX_STATE_BYTES} from './sync-limits.mjs';
+import {cacheKey, deviceCache, draftKey, sameDraftVersion} from './device-cache.mjs';
 
 const OWNER_HEADER = 'x-echo-owner';
 const OWNER_KEY = /^[a-f0-9]{64}$/;
-const dbName = 'echo-studio-cache-v1';
 const CACHE_WAIT_MS = 2500;
 const CHECKPOINT_SYNC_MS = 15000;
 const CAPACITY_CODES = new Set(['state-too-large', 'storage-too-large', 'state-count-limit']);
@@ -33,10 +33,6 @@ function loadedData(raw) {
   };
 }
 
-function openDB(){return new Promise((resolve,reject)=>{const req=indexedDB.open(dbName,1);req.onupgradeneeded=()=>{req.result.createObjectStore('kv');};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});}
-async function cacheGet(key){const db=await openDB();return new Promise((resolve,reject)=>{const tx=db.transaction('kv');const q=tx.objectStore('kv').get(key);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);tx.oncomplete=()=>db.close();});}
-async function cacheSet(key,value){const db=await openDB();try{await new Promise((resolve,reject)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(value,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('Storage write interrupted'));});}finally{db.close();}}
-const defaultCache = {get: cacheGet, set: cacheSet};
 class CacheTimeout extends Error {}
 async function accessCache(operation) {
   let deadline;
@@ -58,14 +54,30 @@ function cachedSaveError(value) {
 const serializeState = (revision, data) => JSON.stringify({expectedRevision: revision, data});
 const signedOut = response => response.status === 401 || response.status === 403 ||
   response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400);
-const cacheKey = owner => `state:${owner}`;
 function portableData(data) {
   const {pendingAudioDeletes, _retiredMedia, ...portable} = data;
   return portable;
 }
+const exportData = data => JSON.stringify({app:'Echo Studio', version:1, exportedAt:new Date().toISOString(), data:portableData(data)}, null, 2);
+
+function validDeviceDraft(record, owner) {
+  try {
+    if (record?.pending !== true || record.owner !== owner || !Number.isSafeInteger(record.revision) || record.revision < 0) return false;
+    validateSnapshot(record.data);
+    return true;
+  } catch { return false; }
+}
+
+function sameDeviceDraftContent(current, previous) {
+  if (!previous || previous.owner !== current.owner || previous.revision !== current.revision) return false;
+  if (current.token && current.token === previous.token) return true;
+  return previous.saveError?.code === current.saveError?.code &&
+    previous.saveError?.fingerprint === current.saveError?.fingerprint &&
+    JSON.stringify(previous.data) === JSON.stringify(current.data);
+}
 
 export class Store {
-  constructor({cache = defaultCache} = {}) {
+  constructor({cache = deviceCache} = {}) {
     this.cache = cache;
     this.data = initialData();
     this.revision = 0;
@@ -91,6 +103,16 @@ export class Store {
     this.cacheWrites = new Map();
     this.cacheVersion = 0;
     this.saveError = null;
+    this.writer = this.cache.list ? crypto.randomUUID() : null;
+    this.draftRecords = new Map();
+    this.deviceDraftOccurrence = 0;
+    this.draftMedia = null;
+    this.deviceRead = 0;
+    this.reviewedDrafts = new Map();
+    this.adoptedDrafts = new Map();
+    this.adoptedSequence = null;
+    this.deviceReviewRequired = false;
+    this.deviceChoice = null;
   }
 
   migrate(){const missing=new Set(this.data.lessons.filter(l=>l.importedAt&&!l.phrases?.length&&l.source).map(l=>l.id));migrateLibrary(this.data);const repaired=repairRollingCaptionLessons(this.data),recovered=restoreOriginalPlayback(this.data);if(repaired||recovered||this.data.lessons.some(l=>missing.has(l.id)&&l.phrases?.length)){this.pending=true;this.seq++;}}
@@ -105,7 +127,7 @@ export class Store {
   #armFlush() {
     clearTimeout(this.timer);
     this.timer = null;
-    if (this.saving || !this.authenticated || !this.pending) return;
+    if (this.saving || !this.authenticated || !this.pending || this.deviceReviewRequired || this.deviceChoice) return;
     const nextWrite = this.flushAt ?? Infinity;
     const nextCheckpoint = this.checkpointAt ?? Infinity;
     const next = this.mode === 'cloud' ? Math.min(nextWrite, nextCheckpoint) :
@@ -141,6 +163,13 @@ export class Store {
     this.preserveCache = false;
     this.cacheStatus = 'pending';
     this.saveError = null;
+    this.draftRecords.clear();
+    this.draftMedia = null;
+    this.reviewedDrafts.clear();
+    this.adoptedDrafts.clear();
+    this.adoptedSequence = null;
+    this.deviceReviewRequired = false;
+    this.deviceChoice = null;
     this.mode = 'locked';
     this.onChange();
   }
@@ -164,7 +193,10 @@ export class Store {
       response = await fetch('/api/state', {headers: {Accept: 'application/json'}, cache: 'no-store',
         redirect: 'manual', signal: AbortSignal.timeout(5000)});
     } catch {
-      if (requestGeneration === this.generation) this.connectionUnavailable();
+      if (requestGeneration === this.generation) {
+        this.connectionUnavailable();
+        await this.refreshDeviceDrafts();
+      }
       return;
     }
     if (requestGeneration !== this.generation) return;
@@ -175,7 +207,10 @@ export class Store {
     }
     if (!response.ok) {
       if (owner && owner !== this.owner) this.resetOwner();
-      else this.connectionUnavailable();
+      else {
+        this.connectionUnavailable();
+        await this.refreshDeviceDrafts();
+      }
       return;
     }
     const switched = this.owner !== owner;
@@ -193,11 +228,21 @@ export class Store {
     if (!switched) await this.saving;
     if (generation !== this.generation ||
         (!switched && this.revision !== requestedRevision && remote.revision < this.revision)) return;
+    const devices = this.writer ? await this.#readDeviceDrafts(owner) : null;
+    if (generation !== this.generation ||
+        (!switched && this.revision !== requestedRevision && remote.revision < this.revision)) return;
+    if (devices && remote.data !== null) this.#dropLandedDrafts(devices, remote);
     if (switched) {
       // Never read the unbound v1 `state` entry. It may belong to another owner.
       let cached = this.suspended.get(owner);
       let preserveCache = false;
-      try { cached ||= await accessCache(() => this.cache.get(cacheKey(owner))); }
+      try {
+        if (this.writer) {
+          cached ||= this.#recoverDeviceDrafts(owner, remote.revision, devices);
+        } else {
+          cached ||= await accessCache(() => this.cache.get(cacheKey(owner)));
+        }
+      }
       catch { preserveCache = true; }
       if (generation !== this.generation) return;
       this.preserveCache = preserveCache;
@@ -228,8 +273,16 @@ export class Store {
       this.generation++;
     }
     this.authenticated = true;
+    const hadDeviceCopies = this.draftRecords.size > 0;
+    if (devices) this.#installDeviceDrafts(devices);
     if (!switched && remote.revision === this.revision &&
-        ['cloud', 'offline', 'conflict', 'rejected'].includes(this.mode)) return;
+        ['cloud', 'offline', 'conflict', 'rejected'].includes(this.mode)) {
+      if (devices?.size || hadDeviceCopies) {
+        this.#armFlush();
+        this.onChange();
+      }
+      return;
+    }
     let acceptedData;
     if (this.pending && remote.data !== null && remote.revision === this.revision + 1) {
       const cloudData = loadedData(remote.data);
@@ -241,6 +294,7 @@ export class Store {
         this.saveError = null;
         this.retryDelay = 2000;
         this.#clearFlushSchedule();
+        this.#removeAdoptedDrafts();
       }
     }
     if (this.pending && remote.revision !== this.revision) {
@@ -255,6 +309,7 @@ export class Store {
       }
     }
     this.migrate();
+    this.#updateDeviceReview();
     this.saveCache();
     this.onChange();
     if (this.pending && this.mode === 'cloud') this.#scheduleFlush(0);
@@ -268,6 +323,203 @@ export class Store {
     else if (!['offline', 'conflict', 'rejected'].includes(this.mode)) this.mode = 'local';
     this.#armFlush();
     this.onChange();
+  }
+
+  async #readDeviceDrafts(owner, complete = false) {
+    const read = ++this.deviceRead;
+    try {
+      const copies = await accessCache(() => this.cache.list(owner));
+      if (read !== this.deviceRead) return null;
+      const valid = new Map([...copies].filter(([, record]) => validDeviceDraft(record, owner)));
+      return complete && valid.size !== copies.size ? null : valid;
+    } catch { return null; }
+  }
+
+  #recoverDeviceDrafts(owner, revision, drafts) {
+    if (!drafts?.size) return null;
+    const compatible = [...drafts].filter(([id, record]) => record.revision === revision || id === cacheKey(owner));
+    if (!compatible.length) return null;
+    const record = (compatible.find(([, copy]) => cachedSaveError(copy.saveError)) ?? compatible[0])[1];
+    if (drafts.size > 1) {
+      // A reload can find both the selected source and the new tab's
+      // durable copy before account acknowledgement. They must fully agree.
+      const payload = serializeState(record.revision, loadedData(record.data));
+      for (const copy of drafts.values()) {
+        if (copy !== record && serializeState(copy.revision, loadedData(copy.data)) !== payload) return null;
+      }
+    }
+    this.adoptedDrafts = new Map(drafts);
+    this.adoptedSequence = this.seq;
+    return record;
+  }
+
+  #dropLandedDrafts(drafts, remote) {
+    const received = [...drafts].filter(([, record]) => record.revision + 1 === remote.revision);
+    if (!received.length) return;
+    const cloud = JSON.stringify(loadedData(remote.data));
+    for (const [id, record] of received) {
+      if (JSON.stringify(loadedData(record.data)) !== cloud) continue;
+      drafts.delete(id);
+      // A comparison happens again in the write transaction in case an
+      // outstanding tab has since put a newer checkpoint at the same key.
+      this.cache.remove(id, record).catch(() => {});
+    }
+  }
+
+  #installDeviceDrafts(drafts) {
+    drafts.delete(draftKey(this.owner, this.writer));
+    for (const [id, record] of this.adoptedDrafts) {
+      if (sameDraftVersion(drafts.get(id), record)) drafts.delete(id);
+    }
+    this.#replaceDeviceDrafts(drafts);
+    for (const id of this.reviewedDrafts.keys()) {
+      if (!drafts.has(id)) this.reviewedDrafts.delete(id);
+    }
+    this.#updateDeviceReview();
+  }
+
+  #replaceDeviceDrafts(drafts) {
+    if (drafts.size !== this.draftRecords.size ||
+        [...drafts].some(([id, record]) => !sameDeviceDraftContent(record, this.draftRecords.get(id)))) {
+      this.deviceDraftOccurrence++;
+      this.draftMedia = null;
+    }
+    this.draftRecords = drafts;
+  }
+
+  #updateDeviceReview() {
+    this.deviceReviewRequired = (this.pending || this.draftRecords.size > 1) &&
+      [...this.draftRecords].some(([id, record]) => !sameDraftVersion(record, this.reviewedDrafts.get(id)));
+  }
+
+  async refreshDeviceDrafts({complete = false} = {}) {
+    if (!this.writer || !this.authenticated) return false;
+    const generation = this.generation;
+    const writer = this.writer;
+    const copies = await this.#readDeviceDrafts(this.owner, complete);
+    if (!copies || generation !== this.generation || writer !== this.writer) return false;
+    this.#installDeviceDrafts(copies);
+    this.#armFlush();
+    this.onChange();
+    return true;
+  }
+
+  get deviceDrafts() {
+    return [...this.draftRecords].map(([id, {data, revision, savedAt}]) => {
+      const lesson = data.lessons.find(lesson => lesson.id === data.lastLessonId) ??
+        data.lessons.reduce((recent, lesson) => (lesson.progress?.updatedAt ?? 0) > (recent?.progress?.updatedAt ?? -1) ? lesson : recent, null);
+      return {id, savedAt: Number.isFinite(savedAt) ? savedAt : null, revision,
+        lessons: data.lessons.length, collections: data.collections.length, sessions: data.sessions.length,
+        position: lesson?.progress?.position ?? null, title: lesson?.title ?? '', theme: data.preferences.theme ?? ''};
+    }).sort((a, b) => (b.savedAt ?? 0) - (a.savedAt ?? 0));
+  }
+
+  exportDeviceDraft(id) {
+    const record = this.draftRecords.get(id);
+    return this.authenticated && record ? exportData(record.data) : null;
+  }
+
+  deviceDraftMediaReferences() {
+    if (this.draftMedia) return this.draftMedia;
+    const paths = new Set();
+    for (const {data} of this.draftRecords.values()) {
+      for (const path of mediaReferences(data)) paths.add(path);
+    }
+    this.draftMedia = paths;
+    return paths;
+  }
+
+  keepWorkingCopy() {
+    if (!this.authenticated || this.deviceChoice) return false;
+    this.reviewedDrafts = new Map(this.draftRecords);
+    this.#updateDeviceReview();
+    if (this.pending && this.mode === 'cloud') this.#scheduleFlush(0);
+    else this.#armFlush();
+    this.onChange();
+    return true;
+  }
+
+  async useDeviceDraft(id) {
+    const reviewed = this.draftRecords.get(id);
+    if (!this.authenticated || !reviewed || this.deviceChoice) return false;
+    const generation = this.generation;
+    const choice = {};
+    this.deviceChoice = choice;
+    this.#armFlush();
+    try {
+      await this.saving;
+      await this.connection;
+      if (generation !== this.generation) return false;
+      const sequence = this.seq;
+      const workingId = draftKey(this.owner, this.writer);
+      let working;
+      if (this.pending) {
+        await accessCache(() => this.saveCache());
+        if (this.cacheStatus !== 'saved') return false;
+        working = await accessCache(() => this.cache.get(workingId));
+        if (!validDeviceDraft(working, reviewed.owner)) {
+          if (this.adoptedSequence !== sequence || !this.adoptedDrafts.size) return false;
+          working = null;
+        }
+      }
+      const record = await accessCache(() => this.cache.get(id));
+      if (!sameDraftVersion(record, reviewed)) {
+        await this.refreshDeviceDrafts();
+        return false;
+      }
+      const data = loadedData(record.data);
+      const cachedError = cachedSaveError(record.saveError);
+      const unchangedError = cachedError &&
+        cachedError.fingerprint === await snapshotFingerprint(serializeState(record.revision, record.data));
+      if (generation !== this.generation || sequence !== this.seq) return false;
+      // The prior tab copy keeps its own keys and can still be reviewed.
+      const alternatives = new Map(this.draftRecords);
+      if (working) alternatives.set(workingId, working);
+      for (const [sourceId, source] of this.adoptedDrafts) alternatives.set(sourceId, source);
+      this.writer = crypto.randomUUID();
+      this.reviewedDrafts = new Map(alternatives);
+      this.adoptedDrafts = new Map([[id, record]]);
+      alternatives.delete(id);
+      this.#replaceDeviceDrafts(alternatives);
+      this.data = data;
+      this.revision = record.revision;
+      this.pending = true;
+      this.seq++;
+      this.adoptedSequence = this.seq;
+      this.saveError = unchangedError ? cachedError : null;
+      this.mode = this.saveError ? 'rejected' : 'local';
+      this.conflict = null;
+      this.#clearFlushSchedule();
+      this.#updateDeviceReview();
+      this.saveCache();
+      this.onChange();
+      await this.connect();
+      return generation === this.generation;
+    } catch { return false; }
+    finally {
+      if (this.deviceChoice === choice) {
+        this.deviceChoice = null;
+        this.#armFlush();
+      }
+    }
+  }
+
+  async discardDeviceDraft(id) {
+    const reviewed = this.draftRecords.get(id);
+    if (!this.authenticated || !reviewed) return false;
+    const generation = this.generation;
+    try {
+      const removed = await accessCache(() => this.cache.remove(id, reviewed));
+      if (generation !== this.generation) return false;
+      await this.refreshDeviceDrafts();
+      return generation === this.generation && removed;
+    } catch { return false; }
+  }
+
+  #removeAdoptedDrafts() {
+    for (const [id, record] of this.adoptedDrafts) this.cache.remove(id, record).catch(() => {});
+    this.adoptedDrafts.clear();
+    this.adoptedSequence = null;
   }
 
   cacheSnapshot() {
@@ -295,6 +547,18 @@ export class Store {
     return write;
   }
 
+  async #writeDeviceCopy(key, snapshot, sources) {
+    if (!snapshot.pending) return this.cache.remove(key);
+    for (const [id, reviewed] of sources) {
+      if (reviewed.revision !== snapshot.revision) continue;
+      const previous = cachedSaveError(reviewed.saveError);
+      if (previous?.code !== snapshot.saveError?.code || previous?.fingerprint !== snapshot.saveError?.fingerprint) continue;
+      const current = await this.cache.get(id).catch(() => null);
+      if (sameDraftVersion(current, reviewed)) return;
+    }
+    return this.cache.set(key, {...snapshot, token:crypto.randomUUID(), savedAt:Date.now()});
+  }
+
   async #writeCache(owner, lease) {
     while (owner === this.owner && !this.preserveCache) {
       const generation = this.generation;
@@ -303,7 +567,10 @@ export class Store {
       let transaction;
       try {
         const snapshot = structuredClone(this.cacheSnapshot());
-        transaction = Promise.resolve().then(() => this.cache.set(cacheKey(owner), snapshot));
+        const key = this.writer ? draftKey(owner, this.writer) : cacheKey(owner);
+        const sources = this.adoptedSequence === this.seq ? [...this.adoptedDrafts] : [];
+        const write = this.writer ? () => this.#writeDeviceCopy(key, snapshot, sources) : () => this.cache.set(key, snapshot);
+        transaction = Promise.resolve().then(write);
         await accessCache(() => transaction);
       }
       catch (error) {
@@ -345,6 +612,7 @@ export class Store {
     }
     this.seq++;
     this.pending = true;
+    this.#updateDeviceReview();
     this.saveCache();
     if (progressOnly) {
       if (this.checkpointAt === null) {
@@ -394,7 +662,7 @@ export class Store {
 
   async #send(retryRejected) {
     if (this.saving) return this.saving;
-    if (!this.pending || !this.authenticated ||
+    if (!this.pending || !this.authenticated || this.deviceReviewRequired || this.deviceChoice ||
         !(['cloud', 'offline'].includes(this.mode) || (retryRejected && this.mode === 'rejected'))) return;
     this.#clearFlushSchedule();
     this.savingSequence = this.seq;
@@ -424,7 +692,23 @@ export class Store {
   async #flush() {
     const owner = this.owner;
     const generation = this.generation;
+    if (this.writer && this.data.pendingAudioDeletes?.length) {
+      // Recording retirement in D1 is irreversible. A sibling tab can
+      // have saved a pending reference since our last owner verification.
+      const drafts = await this.#readDeviceDrafts(owner, true);
+      if (generation !== this.generation) return;
+      if (drafts) this.#installDeviceDrafts(drafts);
+      if (this.deviceReviewRequired || this.deviceChoice) {
+        this.onChange();
+        return;
+      }
+      const referenced = this.deviceDraftMediaReferences();
+      const safe = drafts ? (this.data.pendingAudioDeletes || []).filter(path => !referenced.has(path)) : [];
+      if (safe.length) this.data.pendingAudioDeletes = safe;
+      else delete this.data.pendingAudioDeletes;
+    }
     const sequence = this.seq;
+    this.savingSequence = sequence;
     const sentRetirements = new Set(this.data.pendingAudioDeletes || []);
     const snapshot = serializeState(this.revision, this.data);
     let fingerprint;
@@ -467,6 +751,7 @@ export class Store {
             this.mode = 'cloud';
             this.saveError = null;
             this.retryDelay = 2000;
+            this.#removeAdoptedDrafts();
           }
         }
       }
@@ -475,6 +760,7 @@ export class Store {
     }
     if (generation !== this.generation) return;
     this.migrate();
+    this.#updateDeviceReview();
     this.saveCache();
     this.onChange();
     if (this.pending && this.mode === 'cloud' && (this.flushAt !== null || this.checkpointAt === null)) {
@@ -506,14 +792,16 @@ export class Store {
       this.#clearFlushSchedule();
       this.data = loadedData(data);
       this.pending = false;
+      this.#removeAdoptedDrafts();
       this.migrate();
+      this.#updateDeviceReview();
       this.saveCache();
       this.onChange();
       if (this.pending) this.#scheduleFlush(0);
     }
   }
 
-  export(){return JSON.stringify({app:'Echo Studio',version:1,exportedAt:new Date().toISOString(),data:portableData(this.data)},null,2);}
+  export(){return exportData(this.data);}
   restore(raw) {
     const backup = JSON.parse(raw);
     if (backup?.app !== 'Echo Studio' || !backup.data || typeof backup.data !== 'object' || Array.isArray(backup.data)) throw Error('This is not a valid Echo Studio export.');

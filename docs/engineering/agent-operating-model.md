@@ -4,7 +4,7 @@ The primary Codex thread is the Engineering Lead. The lead establishes the basel
 
 ## Start a session
 
-Open a **new Codex session rooted at this checkout** so the host can load project-scoped `.codex/config.toml` and the nine `.codex/agents/*.toml` files. In a CLI environment with Codex installed, run `codex --cd /workspace/echo` (or use the actual checkout path). Use your normal trusted-project setting. For a quick delegation check, ask:
+Open a **new Codex session rooted at this checkout** so the host can load project-scoped `.codex/config.toml` and `.codex/agents/*.toml` files. In a CLI environment with Codex installed, run `codex --cd /workspace/echo` (or use the actual checkout path). Use your normal trusted-project setting. For a quick delegation check, ask:
 
 > Use the native `independent_reviewer` agent to inspect Git HEAD and name one Echo Studio build or test entry point. Give it read-only scope, wait for its result, and report its actual agent ID and whether it ran as a named role or a generic agent.
 
@@ -22,9 +22,30 @@ Read the actual implementation, current product decisions and `AGENTS.md`. Treat
 
 ## Assignment contract
 
-The lead supplies an ID, role, objective, baseline SHA and any dirty paths, product context and relevant decisions, scope and exclusions, mode, authorised operations, owned files/ports/outputs, evidence already available, dependencies, deliverables and acceptance criteria. Use **audit**, **design**, **implement** or **validate** explicitly. Audit is read-only for app code and data. Implementation requires scope and permission. Start validation with a fresh context where independence matters.
+The lead supplies an ID, role, objective, baseline SHA and any dirty paths, product context and relevant decisions, scope and exclusions, mode, authorised operations, owned files, ports or outputs, evidence already available, dependencies, deliverables and acceptance criteria. Use the selected mode to establish depth and authority. Start consequential validation with a fresh context and a reviewer who authored none of the material under review.
 
 Return the task ID and status, actual files/paths and line references, findings in the format in the [audit workflow](audit-workflow.md), commands and results, confidence, unresolved dependencies, and a short decision request when needed. Send severe evidence and blockers to the lead immediately. The lead asks for targeted follow-up when evidence conflicts or is incomplete.
+
+## Select the operating mode
+
+| Mode | Expected investigation and output | Write boundary and decision gate |
+| --- | --- | --- |
+| Maintenance | Inspect the affected normal entry point, confirm a focused cause and choose the least disruptive correction. Identify a concrete regression check. | Edit only the authorised repair. Obtain scoped validation for consequential fixes. |
+| Comprehensive audit | Inventory domains, normal journeys and failure paths. Independently reproduce consequential findings, reconcile duplicates and record unexamined areas. | Read-only application and user data. Deliver an evidence register and remediation gates. |
+| Strategic transformation | Establish an aspirational product baseline. Reassess prior decisions, compare preserve, simplify, replace and eliminate options across structural and strategic horizons, and examine user value, cost and risk. | Produce reviewed strategic epics for owner approval. Discovery artifacts and requested operating instructions can be edited. Production stays out of scope. |
+| Product discovery | Investigate a product or learning hypothesis with actual experience evidence, relevant external sources and competing design concepts. Prototype separately and define tests that can reject the hypothesis. | Use synthetic fixtures and approved research. Record expected versus measured outcomes. Participant work and data collection require the relevant authority. |
+| Implementation | Translate an authorised scope and acceptance contract into a bounded, reversible change. Coordinate shared files and measure remaining risks. | One writer per interface. Independent QA and review precede completion. |
+| Independent validation | Reproduce material evidence and challenge scope, alternatives, accessibility, evidence limits and regressions at the appropriate layer. Track rejected and unresolved assertions. | Reviewer is independent of authorship. Return corrections to the responsible author. Report approval scope and exact reviewed candidate. |
+
+When a request combines modes, declare the transition and its decision gate. An approved strategic epic can move into detailed product, learning, UX and technical specification. The owner makes consequential choices about product direction, cost, privacy or core behaviour. The team resolves routine design details within that authority. The lead obtains implementation authority before changing the application.
+
+## Product design workstream
+
+The Principal Product Designer coordinates through the Engineering Lead. The UX Specialist covers UX research and mobile experience. Interaction, Visual and Design Systems specialists own distinct outputs where the scope benefits from separation. Pair with the Product Strategist for learning outcomes and the engineering specialists for feasibility. The Independent Design Critic reviews each materially different concept and its actual journey evidence. The Independent Reviewer considers the integrated roadmap and its technical, learning and commercial or operational implications.
+
+Use real rendered journeys with synthetic data, mobile first, followed by appropriate desktop, responsive and accessibility checks. Count steps and meaningful decisions from a stated start and endpoint. Mark fixture walkthroughs, user observations and forecasts separately. Prepare at least three coherent models for a strategic redesign, with conditions that would favour each. Keep prototypes outside the production bundle and record the proposal, evidence, critique, correction and owner decision.
+
+Track the actual native agent ID, named-role or generic execution, baseline, assignment mode, owned outputs, evidence inspected, conclusion and independent disposition. Reusing an agent for another role does not make its work independent of its own earlier authorship. Record gaps explicitly and retain domain disagreements with their evidence. A returned report alone does not establish comprehensive coverage.
 
 ## Select roles by request
 

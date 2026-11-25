@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 920" role="img" aria-labelledby="title description">
+  <title id="title">Three ways to start and practise speaking</title>
+  <desc id="description">Three columns show two linked mobile screens each. Reference-led starts with a saved lesson and focuses on precise playback. Guided practice starts with an authored prompt and focuses on one original response. The communication studio starts by choosing a real goal and focuses on a method for it.</desc>
+  <style>
+    text { font-family: Inter, system-ui, sans-serif; fill: #202024; }
+    .title { font-size: 35px; font-weight: 700; letter-spacing: -1px; }
+    .concept { font-size: 21px; font-weight: 700; }
+    .caption { font-size: 15px; fill: #535158; }
+    .phone { fill: #151619; stroke: #3c3e43; }
+    .line { stroke: #44464c; }
+    .heading { font-size: 23px; font-weight: 650; fill: #f5f3f6; }
+    .label { font-size: 16px; font-weight: 600; fill: #f5f3f6; }
+    .secondary { font-size: 14px; fill: #c5c0cb; }
+    .nav { font-size: 13px; fill: #c5c0cb; }
+    .selected { font-weight: 650; fill: #e5cf90; }
+    .primary { fill: #e5cf90; }
+    .button { font-size: 15px; font-weight: 650; fill: #25211a; }
+    .quiet { fill: #27292d; stroke: #44464c; }
+    .pointer { fill: none; stroke: #545159; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+
+  <rect width="1120" height="920" fill="#f4f2ef"/>
+  <text x="42" y="58" class="title">Three ways to enter a practice</text>
+  <text x="42" y="87" class="caption">Mobile studies for the same goal of delivering a short update</text>
+
+  <g transform="translate(42 125)" aria-label="Reference-led">
+    <text y="0" class="concept">A. Reference-led</text>
+    <text y="25" class="caption">Choose a recording and its exact phrase.</text>
+    <g transform="translate(0 44)">
+      <rect width="320" height="313" rx="25" class="phone"/>
+      <text x="24" y="48" class="heading">Listen</text>
+      <rect x="24" y="68" width="272" height="92" rx="12" class="quiet"/>
+      <text x="40" y="94" class="secondary">Continue practising</text>
+      <text x="40" y="121" class="label">Project update</text>
+      <text x="40" y="143" class="secondary">Phrase 4</text>
+      <circle cx="264" cy="114" r="20" class="primary"/>
+      <path d="M260 106l8 8-8 8" fill="none" stroke="#25211a" stroke-width="2"/>
+      <text x="24" y="194" class="label">Speaking prompt</text>
+      <text x="24" y="232" class="secondary">Recently used</text>
+      <text x="24" y="255" class="label">Interview practice</text>
+      <path d="M24 271h272" class="line"/>
+      <text x="24" y="293" class="nav selected">Listen</text>
+      <text x="121" y="293" class="nav">Library</text>
+      <text x="248" y="293" class="nav">History</text>
+    </g>
+    <path d="M160 366v19m-5-5 5 5 5-5" class="pointer"/>
+    <g transform="translate(0 397)">
+      <rect width="320" height="320" rx="25" class="phone"/>
+      <text x="24" y="38" class="secondary">Back</text>
+      <text x="85" y="38" class="label">Project update</text>
+      <text x="24" y="115" class="heading">The draft will be</text>
+      <text x="24" y="144" class="heading">ready on Thursday.</text>
+      <path d="M24 175h272" class="line"/>
+      <path d="M24 175h114" stroke="#e5cf90" stroke-width="2"/>
+      <text x="24" y="200" class="secondary">Phrase 4 · 0:04</text>
+      <text x="251" y="200" class="secondary">Queue</text>
+      <text x="24" y="244" class="label">Replay</text>
+      <rect x="119" y="218" width="82" height="44" rx="9" class="primary"/>
+      <text x="160" y="245" text-anchor="middle" class="button">Play</text>
+      <text x="260" y="244" class="label">Next</text>
+      <text x="24" y="292" class="secondary">Try a new message</text>
+    </g>
+    <text y="750" class="caption">Use the selected recording at its cue.</text>
+  </g>
+
+  <g transform="translate(400 125)" aria-label="One small practice">
+    <text y="0" class="concept">B. One small practice</text>
+    <text y="25" class="caption">Start one activity. Stop when ready.</text>
+    <g transform="translate(0 44)">
+      <rect width="320" height="313" rx="25" class="phone"/>
+      <text x="24" y="48" class="heading">Today</text>
+      <text x="24" y="106" class="heading">Say what changed</text>
+      <text x="24" y="134" class="secondary">Give a short work update.</text>
+      <rect x="24" y="157" width="272" height="44" rx="9" class="primary"/>
+      <text x="160" y="184" text-anchor="middle" class="button">Start practice</text>
+      <text x="24" y="241" class="label">Resume project update</text>
+      <path d="M24 271h272" class="line"/>
+      <text x="24" y="293" class="nav selected">Today</text>
+      <text x="121" y="293" class="nav">Library</text>
+      <text x="248" y="293" class="nav">History</text>
+    </g>
+    <path d="M160 366v19m-5-5 5 5 5-5" class="pointer"/>
+    <g transform="translate(0 397)">
+      <rect width="320" height="320" rx="25" class="phone"/>
+      <text x="24" y="38" class="secondary">Back</text>
+      <text x="24" y="93" class="heading">Give the update</text>
+      <text x="24" y="130" class="label">The review moves to</text>
+      <text x="24" y="154" class="label">Thursday. Ask them to</text>
+      <text x="24" y="178" class="label">bring the draft.</text>
+      <text x="24" y="216" class="secondary">Hear an example</text>
+      <text x="24" y="240" class="secondary">Try a fresh message</text>
+      <rect x="24" y="261" width="272" height="44" rx="9" class="primary"/>
+      <text x="160" y="288" text-anchor="middle" class="button">Done for now</text>
+    </g>
+    <text y="750" class="caption">Speak, then stop or continue by choice.</text>
+  </g>
+
+  <g transform="translate(758 125)" aria-label="Communication studio">
+    <text y="0" class="concept">C. Communication studio</text>
+    <text y="25" class="caption">Choose a goal and practise a method.</text>
+    <g transform="translate(0 44)">
+      <rect width="320" height="313" rx="25" class="phone"/>
+      <text x="24" y="48" class="heading">Studio</text>
+      <text x="24" y="91" class="secondary">What do you want to practise?</text>
+      <path d="M24 107h272m-272 44h272m-272 44h272m-272 44h272" class="line"/>
+      <text x="24" y="134" class="label">Make a change clear</text>
+      <text x="24" y="176" class="label">Find an expression</text>
+      <text x="24" y="218" class="label">Start comfortably</text>
+      <path d="M285 121l5 5-5 5m0 32 5 5-5 5m0 32 5 5-5 5" fill="none" stroke="#c5c0cb"/>
+      <path d="M24 271h272" class="line"/>
+      <text x="24" y="293" class="nav selected">Studio</text>
+      <text x="121" y="293" class="nav">Library</text>
+      <text x="248" y="293" class="nav">History</text>
+    </g>
+    <path d="M160 366v19m-5-5 5 5 5-5" class="pointer"/>
+    <g transform="translate(0 397)">
+      <rect width="320" height="320" rx="25" class="phone"/>
+      <text x="24" y="38" class="secondary">Back to Studio</text>
+      <text x="24" y="93" class="heading">Make a change clear</text>
+      <text x="24" y="134" class="label">Emphasise the part of</text>
+      <text x="24" y="157" class="label">your message that changed.</text>
+      <text x="24" y="201" class="secondary">Hear your selected example</text>
+      <rect x="24" y="226" width="272" height="44" rx="9" class="primary"/>
+      <text x="160" y="253" text-anchor="middle" class="button">Try a fresh update</text>
+      <text x="24" y="298" class="secondary">Done for now</text>
+    </g>
+    <text y="750" class="caption">Borrow a method for a different message.</text>
+  </g>
+</svg>

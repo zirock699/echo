@@ -161,9 +161,10 @@ def measure_steady(fixture, page):
         open.onerror = () => reject(open.error);
         open.onsuccess = () => {
             const db = open.result, transaction = db.transaction('kv');
-            const read = transaction.objectStore('kv').get(`state:${owner}`);
+            const prefix = `state:${owner}:draft:`;
+            const read = transaction.objectStore('kv').getAll(IDBKeyRange.bound(prefix, prefix + '\uffff'));
             read.onerror = () => reject(read.error);
-            read.onsuccess = () => resolve(read.result?.data?.lessons?.[0]?.progress);
+            read.onsuccess = () => resolve(read.result.find(copy => copy.pending)?.data?.lessons?.[0]?.progress);
             transaction.oncomplete = () => db.close();
         };
     })''', fixture.owner_key)

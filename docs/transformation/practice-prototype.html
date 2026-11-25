@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echo Studio · Practice concept</title>
+<style>
+:root{color-scheme:light;--ground:#f0efe9;--paper:#fcfbf5;--ink:#22231f;--soft:#54564d;--line:#cdccc0;--accent:#594721;--active:#e9e3d2;--quiet:#eceae0}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;--ground:#181917;--paper:#222320;--ink:#f2f0e9;--soft:#c3c3b9;--line:#505148;--accent:#e6d29c;--active:#3b372d;--quiet:#2d2e28}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:1rem/1.55 system-ui,sans-serif}
+button,a{font:inherit;color:inherit;touch-action:manipulation}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:4px}
+.skip{position:absolute;top:1rem;left:1rem;transform:translateY(-200%);z-index:2;background:var(--paper);padding:.5rem}
+.skip:focus{transform:none}
+.shell{max-width:81rem;min-height:100dvh;margin:auto;display:grid;grid-template-columns:13rem minmax(0,1fr);grid-template-rows:auto 1fr;container-type:inline-size}
+header{grid-column:1/-1;min-height:4rem;height:max-content;padding:1rem clamp(1rem,4vw,3rem);display:flex;align-items:baseline;justify-content:space-between;gap:.5rem 1rem;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.brand{font-weight:720;font-size:1.12rem;letter-spacing:-.035em}
+.caption{font-size:.82rem;color:var(--soft)}
+nav{padding:clamp(1rem,4vw,2.5rem) 1rem;display:flex;flex-direction:column;gap:.35rem;border-right:1px solid var(--line)}
+nav a,.back{min-height:2.75rem;display:flex;align-items:center;padding:.5rem .8rem;border-radius:.55rem;text-decoration:none;font-weight:635}
+nav a[aria-current=page]{background:var(--active);color:var(--ink)}
+nav a:hover,.back:hover{box-shadow:inset 0 0 0 1px var(--line)}
+main{min-width:0;width:min(100%,54rem);padding:clamp(1.25rem,6vw,4.5rem);align-self:start;outline-offset:-4px}
+h1,h2,p{margin:0}
+h1{font:400 clamp(2.3rem,5.8vw,4.5rem)/1.02 Georgia,serif;letter-spacing:-.045em;overflow-wrap:anywhere}
+h2{font-size:1.1rem;line-height:1.28;letter-spacing:-.02em}
+.lead{margin-top:.85rem;max-width:47ch;color:var(--soft)}
+.choices{margin-top:2rem;border-top:1px solid var(--line)}
+.choice{min-height:5.4rem;display:grid;grid-template-columns:1fr auto;align-items:center;gap:.25rem .7rem;padding:.95rem .75rem;border-bottom:1px solid var(--line);text-decoration:none}
+.choice:hover{background:var(--paper)}
+.choice strong,.choice small{display:block}
+.choice strong{font-size:1.06rem}
+.choice small{color:var(--soft);font-size:.9rem;margin-top:.2rem}
+.arrow{padding:.3rem;color:var(--accent);font-size:1.12rem}
+.back{width:max-content;padding-left:0;margin-bottom:1.4rem}
+.scene{margin-top:1.8rem;padding:clamp(1.15rem,4vw,2.2rem);background:var(--paper);border:1px solid var(--line);border-radius:.8rem}
+.quote{font:400 clamp(1.45rem,4vw,2.45rem)/1.28 Georgia,serif;letter-spacing:-.015em;max-width:26ch;overflow-wrap:anywhere}
+.scene p + p{margin-top:.85rem}
+.scene .instruction{font-weight:680}
+.tools{display:flex;gap:.65rem;flex-wrap:wrap;margin-top:1.35rem}
+.button{border:1px solid var(--line);border-radius:.55rem;background:var(--paper);padding:.6rem .9rem;min-height:2.75rem;font-weight:650;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.primary{background:var(--accent);border-color:var(--accent);color:var(--paper)}
+.button:hover{box-shadow:0 0 0 2px var(--line)}
+.note{margin-top:1.5rem;color:var(--soft);max-width:45ch}
+.timeline{height:5px;background:var(--quiet);margin:1.15rem 0 .35rem;border-radius:1rem;overflow:hidden}
+.timeline span{display:block;width:38%;height:100%;background:var(--accent)}
+.history{margin-top:2rem;border-block:1px solid var(--line);padding:1.1rem 0}
+@media(max-width:650px){
+ .shell{display:flex;flex-direction:column}
+ header{order:0;padding:.8rem 1rem;min-height:0}
+ main{order:1;padding:1.65rem 1rem 1.4rem;flex:1}
+ nav{order:2;background:var(--paper);border:0;border-top:1px solid var(--line);padding:.4rem .8rem max(.4rem,env(safe-area-inset-bottom));flex-direction:row}
+ nav a{justify-content:center;flex:1;padding:.4rem;min-width:0}
+ .choice{padding-inline:0}
+ .choices{margin-top:1.4rem}
+}
+@container (max-width:250px){nav{flex-wrap:wrap}nav a{flex:1 1 4.5rem}}
+@media(max-height:480px){
+ main{padding-block:1.1rem}
+ h1{font-size:clamp(2rem,5vw,3rem)}
+ .back{margin-bottom:.45rem}
+ .scene{padding:1rem;margin-top:1rem}
+ .quote{font-size:1.4rem;max-width:42ch}
+ .scene p + p{margin-top:.55rem}
+ .tools{margin-top:.75rem}
+ .choice{min-height:4.45rem;padding-block:.55rem}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#screen">Skip to content</a>
+<div class="shell">
+<header><span class="brand">Echo Studio</span><span class="caption">Design prototype · simulated playback</span></header>
+<nav aria-label="Main navigation">
+<a href="#practice" data-page="practice">Practice</a><a href="#library" data-page="library">Library</a><a href="#history" data-page="history">History</a>
+</nav>
+<main id="screen" aria-labelledby="title"></main>
+</div>
+<script>
+const screen = document.getElementById('screen');
+let playing = false;
+let previousRoute = '';
+const arrow = '<span class="arrow" aria-hidden="true">→</span>';
+function choice(destination, label, detail) {
+  return `<a class="choice" href="#${destination}"><span><strong>${label}</strong><small>${detail}</small></span>${arrow}</a>`;
+}
+function exit(destination, label) {
+  return `<a class="back" data-return href="#${destination}">← ${label}</a>`;
+}
+const pages = {
+  practice: () => `<h1 id="title" tabindex="-1">Practice</h1>
+    <div class="choices">${choice('model','Resume your reference','A clear update · phrase 4 of 12')}${choice('speak','Say one original update','A short fictional situation')}</div>`,
+  empty: () => `<h1 id="title" tabindex="-1">Practice</h1><div class="choices">${choice('speak/empty','Say one original update','A short fictional situation')}${choice('library','Open your library','Find or prepare a reference')}</div>`,
+  library: () => `<h1 id="title" tabindex="-1">Library</h1><div class="choices">${choice('model/library','A clear update','Uploaded audio · phrase 4 of 12')}${choice('prepare','Prepare a reference','Bring your own audio or open a supported video')}</div>`,
+  prepare: () => `${exit('library','Library')}<h1 id="title" tabindex="-1">Prepare a reference</h1><div class="scene"><p class="instruction">Choose the source you have.</p><p>With uploaded audio and a timed transcript, preview the first and last phrases before saving. A video link can be bookmarked with its existing transcript or cue.</p></div><p class="note">This prototype illustrates the entry point. Import remains in the current app.</p>`,
+  model: (origin) => {
+    const fromLibrary = origin === 'library';
+    return `${exit(fromLibrary ? 'library' : 'practice',fromLibrary ? 'Library' : 'Practice')}<h1 id="title" tabindex="-1">A clear update</h1><div class="scene"><p class="quote">“The draft will be ready on Thursday.”</p><div class="timeline" aria-hidden="true"><span></span></div><p class="caption" role="status" id="reference-status">Phrase 4 of 12 · paused</p>
+      <div class="tools"><button class="button primary" type="button" id="transport">Play reference</button><a class="button" id="transfer-start" href="#${fromLibrary ? 'transfer/library' : 'transfer'}">Try a new conversation</a></div></div>`;
+  },
+  speak: (origin) => {
+    const home = origin === 'empty' ? 'empty' : 'practice';
+    return `${exit(home,'Practice')}<h1 id="title" tabindex="-1">Say an update</h1><div class="scene"><p class="quote">Your colleague expects the figures on Tuesday. They’ll be ready on Thursday. Ask them to check the figures on Friday.</p><p class="instruction">Give the update in your own words.</p></div><div class="tools"><a class="button primary" href="#done/${home}">Finish</a></div>`;
+  },
+  transfer: (origin) => {
+    const fromLibrary = origin === 'library';
+    return `${exit(fromLibrary ? 'model/library' : 'model','Reference')}<h1 id="title" tabindex="-1">Try a new conversation</h1><div class="scene"><p class="quote">Tomorrow’s meeting will be in the studio instead of online. Ask your teammate to bring the draft.</p><p class="instruction">Give the update in your own words.</p><p class="caption">Borrow an expression or emphasis from the reference if it helps.</p></div><div class="tools"><a class="button primary" href="#done/${fromLibrary ? 'library-reference' : 'reference'}">Finish</a></div>`;
+  },
+  done: (origin) => {
+    const destinations = {
+      empty:['empty','Back to Practice'],
+      history:['history','Back to History'],
+      reference:['model','Return to reference'],
+      'library-reference':['model/library','Return to reference']
+    };
+    const [destination,label] = Object.hasOwn(destinations,origin) ? destinations[origin] : ['practice','Back to Practice'];
+    return `<h1 id="title" tabindex="-1">Finish for now</h1><p class="lead">Think about the detail you wanted your listener to hear.</p><div class="tools"><a class="button primary" data-return href="#${destination}">${label}</a></div>`;
+  },
+  history: () => `<h1 id="title" tabindex="-1">History</h1><div class="history"><h2>A clear update</h2><p class="caption">Sample history · listened and marked one phrase for review</p></div><div class="choices">${choice('later','Try a fresh situation','Recall one expression before hearing the reference again')}</div>`,
+  later: () => `${exit('history','History')}<h1 id="title" tabindex="-1">Try a fresh situation</h1><div class="scene"><p class="quote">The workshop has moved to the courtyard. Ask a friend to bring a notebook.</p><p class="instruction">Tell them what changed and what to do.</p></div><div class="tools"><a class="button primary" href="#done/history">Finish</a></div>`
+};
+function navigate(initial = false) {
+  const [slug,origin] = location.hash.slice(1).split('/');
+  const route = Object.hasOwn(pages, slug) ? slug : 'practice';
+  playing = false;
+  screen.innerHTML = pages[route](origin);
+  const section = ['library','prepare'].includes(route)||['library','library-reference'].includes(origin) ? 'library'
+    : ['history','later'].includes(route)||origin==='history' ? 'history' : 'practice';
+  for (const tab of document.querySelectorAll('[data-page]')) {
+    if (tab.dataset.page === section) tab.setAttribute('aria-current','page');
+    else tab.removeAttribute('aria-current');
+  }
+  document.getElementById('transport')?.addEventListener('click', (event) => {
+    playing = !playing;
+    event.currentTarget.textContent = playing ? 'Pause reference' : 'Play reference';
+    document.getElementById('reference-status').textContent = playing ? 'Phrase 4 of 12 · playback preview' : 'Phrase 4 of 12 · paused';
+  });
+  if (!initial) {
+    window.scrollTo(0,0);
+    const returningToReference = route === 'model' && ['transfer','done'].includes(previousRoute);
+    document.getElementById(returningToReference ? 'transfer-start' : 'title').focus();
+  }
+  previousRoute = route;
+}
+document.querySelector('.skip').addEventListener('click', event => {
+  event.preventDefault();
+  document.getElementById('title').focus();
+});
+const currentHash = () => location.hash || '#practice';
+const trail = [currentHash()];
+let trailIndex = 0;
+const rememberTrail = () => history.replaceState({...history.state,echoPrototypeIndex:trailIndex},'');
+rememberTrail();
+screen.addEventListener('click', event => {
+  const back = event.target.closest('[data-return]');
+  if (!back || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  const earlier = trail.lastIndexOf(back.hash,trailIndex - 1);
+  if (earlier < 0 || earlier >= trailIndex) return;
+  event.preventDefault();
+  history.go(earlier - trailIndex);
+});
+window.addEventListener('hashchange', () => {
+  const previousIndex = history.state?.echoPrototypeIndex;
+  if (Number.isInteger(previousIndex) && trail[previousIndex] === currentHash()) trailIndex = previousIndex;
+  else {
+    trail.splice(++trailIndex,trail.length,currentHash());
+    rememberTrail();
+  }
+  navigate();
+});
+navigate(true);
+</script>
+</body>
+</html>

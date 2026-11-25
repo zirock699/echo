@@ -1,4 +1,5 @@
 import {uiIcon} from './ui-icons.mjs';
+import {artworkURL} from './ambient.mjs';
 const esc=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const normal=s=>String(s||'').trim().toLocaleLowerCase();
 export function searchLibrary(data,query,kind='all'){
@@ -22,7 +23,7 @@ export class SearchUI{
   this.render();
  }
  bind(root){root.addEventListener('compositionstart',e=>{if(e.target.id==='search-query')this.composing=true;},true);root.addEventListener('compositionend',e=>{if(e.target.id==='search-query'){this.composing=false;this.query=e.target.value;this.limit=24;this.updateResults(root);}},true);root.addEventListener('click',e=>{const el=e.target.closest('[data-sx]');if(!el)return;e.preventDefault();e.stopImmediatePropagation();this.action(el.dataset.sx,el.dataset);},true);root.addEventListener('input',e=>{if(e.target.id!=='search-query')return;this.query=e.target.value;this.limit=24;if(!this.composing&&!e.isComposing)this.updateResults(root);},true);root.addEventListener('keydown',e=>{if(e.target.id==='search-query'&&e.key==='Enter'&&!e.isComposing&&!this.composing){e.preventDefault();this.action('submit');}},true);}
- row({type,item}){const image=item.thumbnail?.url||item.frame?.url||item.cover?.url||(type==='lesson'&&item.videoId?`https://i.ytimg.com/vi/${encodeURIComponent(item.videoId)}/mqdefault.jpg`:null);return `<article class="search-result"><button data-sx="open" data-kind="${type}" data-id="${esc(item.id)}"><span class="search-art" aria-hidden="true">${image?`<img src="${esc(image)}" alt="" width="48" height="48" loading="lazy">`:uiIcon(type==='collection'?'folder':type==='course'?'library':'play')}</span><span><strong>${esc(item.title||item.name)}</strong><small>${type==='lesson'?esc(item.channel||item.speaker||'Lesson'):type==='course'?`${item.lessonIds?.length||0} lessons`:'Collection'}</small></span>${uiIcon(type==='lesson'?'play':'chevron')}</button></article>`;}
+ row({type,item}){const image=artworkURL(item);return `<article class="search-result"><button data-sx="open" data-kind="${type}" data-id="${esc(item.id)}"><span class="search-art" aria-hidden="true">${image?`<img src="${esc(image)}" alt="" width="48" height="48" loading="lazy">`:uiIcon(type==='collection'?'folder':type==='course'?'library':'play')}</span><span><strong>${esc(item.title||item.name)}</strong><small>${type==='lesson'?esc(item.channel||item.speaker||'Lesson'):type==='course'?`${item.lessonIds?.length||0} lessons`:'Collection'}</small></span>${uiIcon(type==='lesson'?'play':'chevron')}</button></article>`;}
  updateResults(root){
   const target=root.querySelector?.('#search-results');
   if(!target){this.render();return;}

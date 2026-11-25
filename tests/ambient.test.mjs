@@ -14,5 +14,5 @@ test('cached palette accepts only bounded hex colours for the same video and ver
 });
 test('failed extraction persists a fallback and reopening reuses it',async()=>{
  let requests=0;globalThis.Image=class{set src(value){requests++;queueMicrotask(()=>this.onerror());}};
- const lesson={videoId:'test'};await prepareAmbient(lesson,p=>{lesson.ambientPalette=p;});assert.equal(lesson.ambientPalette.source,'fallback');assert.equal(requests,1);await prepareAmbient(lesson,()=>assert.fail('Must reuse cache'));assert.equal(requests,1);delete globalThis.Image;
+ const lesson={videoId:'test',thumbnail:{url:'/api/audio/00000000-0000-4000-8000-000000000001'}};await prepareAmbient(lesson,p=>{lesson.ambientPalette=p;});assert.equal(lesson.ambientPalette.source,'fallback');assert.equal(requests,1);await prepareAmbient(lesson,()=>assert.fail('Must reuse cache'));assert.equal(requests,1);delete globalThis.Image;
 });

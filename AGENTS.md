@@ -3,8 +3,9 @@
 ## Engineering team
 
 - The main Codex session is the Engineering Lead. Use native Codex specialists for independent domain investigations and consequential reviews. Select only the roles the task needs, keep assignments bounded, and reserve a separate reviewer for consequential findings or changes.
-- Audit by default. Give delegates the precise baseline, permissions, owned paths or services, required evidence and acceptance criteria. Agents share the checkout by default. The lead coordinates writes, validation and integration. Specialists do not delegate recursively.
-- Keep first audits limited to analysis, approved agent configuration and reports. Defer product fixes until authorised. Deployment, commits, pushes and destructive steps require explicit approval.
+- Select the mode from the [operating model](docs/engineering/agent-operating-model.md). Give delegates the mode, baseline, permissions, owned paths or services, required evidence and acceptance criteria. Agents share the checkout by default. The lead coordinates writes, delegation and integration.
+- Strategic transformation and product discovery deliver evidence, alternatives and decisions for the owner. Keep experiments and prototypes outside production. Epic approval opens specification work. Application implementation, commits, pushes, deployment and destructive steps require their own authority.
+- The Principal Product Designer coordinates UX research, interaction, visual, mobile and design-system work through the lead. Reserve the Independent Design Critic for concept critique and the Independent Reviewer for consequential roadmap or implementation decisions.
 - See [agent operating model](docs/engineering/agent-operating-model.md), [audit workflow](docs/engineering/audit-workflow.md) and [quality standards](docs/engineering/quality-standards.md) for the task contract, evidence rules and review gates. Use the project role instructions in `.codex/agents/` even when a host exposes only generic native subagents.
 
 ## Before changing the UI

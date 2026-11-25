@@ -26,6 +26,12 @@ The build creates a Worker at `dist/server/index.js`, embedding the versioned ap
 `npm test` includes a smoke test for a freshly built Worker. To run the browser checks, use Python with Playwright and Chromium. The spoken-audio checks also require FFmpeg with `flite` and `libmp3lame`.
 
 ```sh
+python3 scripts/verify-journeys.py
+```
+
+The runner executes the build and maintained browser checks sequentially. Use `--list` to see the current commands, or `--journey recover` for private-library recovery checks. [Release evidence guide](docs/transformation/release-evidence.md)
+
+```sh
 python3 tests/browser_navigation.py
 python3 tests/browser_original_playback.py
 python3 tests/browser_sync.py
@@ -38,11 +44,16 @@ python3 tests/browser_queue_window.py
 python3 tests/browser_playback_scale.py
 python3 tests/browser_offline.py
 python3 tests/browser_speaking_prompts.py
+python3 tests/browser_reference_preparation.py
+python3 tests/browser_provider_activation.py
+python3 tests/browser_device_recovery.py
 ```
 
 Each script starts its own loopback service with synthetic data. The playback scale check reports timings for the 36-lesson and 16,950-cue audit workload and requires FFmpeg with `libmp3lame`. The offline check exercises a built Worker and uses real Chromium service workers. The older `browser_smoke.py` and `browser_extended.py` are historical inline fixtures.
 
 After the first online visit installs the app shell, a fresh offline tab can open the shell and retry sign-in when the connection returns. A previously verified open tab can keep working from its owner-scoped data during an outage. Private state and audio are excluded from the app shell cache. An updated shell takes over when the previous version's tabs close.
+
+When tabs leave separate pending library copies, use **Settings → Synchronisation → Review device copies** to compare their save times and contents, continue with one, or export a backup. A conflict with a newer account copy remains a separate choice.
 
 ## ZIP import and courses
 
@@ -54,7 +65,7 @@ Timed audio lessons support listen-then-record practice with an expandable wavef
 
 ## Speaking practice
 
-Use **Try a speaking prompt** on Home for a short fictional situation. With a phrase selected, use **Player settings → Practice → Try a new conversation** to try the selected expression or emphasis in a different situation. See the [speaking practice handoff and private pilot guide](docs/product/speaking-prompt-handoff.md).
+Use **Try a speaking prompt** on Home for a short fictional situation. With a selected phrase, **Try a new conversation** is available from the quiet player and from **Player settings → Practice**. Video playback opens when a YouTube reference is deliberately selected. [Speaking practice handoff](docs/product/speaking-prompt-handoff.md) · [Private pilot materials](docs/transformation/pilot-materials.md)
 
 ## Main files
 

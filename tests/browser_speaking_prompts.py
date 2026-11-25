@@ -14,6 +14,7 @@ HOME_EXIT = 'Back to Home'
 TRANSFER_ACTION = 'Try a new conversation'
 TRANSFER_TITLE = 'Take a phrase into a new conversation'
 TRANSFER_EXIT = 'Back to Practice options'
+PLAYER_TRANSFER_EXIT = 'Back to player'
 LESSON_TITLE = 'Speaking prompt fixture'
 LESSON_VIDEO = 'EchoPrompt1'
 PHRASES = [
@@ -100,6 +101,18 @@ def expect_reachable_exit(sheet, name):
     expect(exit_button).to_be_in_viewport()
 
 
+def scroll_open_prompt(page, sheet):
+    page.evaluate("document.documentElement.style.zoom = '2'")
+    position = sheet.evaluate('dialog => { dialog.scrollTop = dialog.scrollHeight; return dialog.scrollTop; }')
+    assert position > 0, 'The enlarged cue must have a nonzero scroll position to retain'
+    return sheet.element_handle(), position
+
+
+def expect_retained_prompt(sheet, previous, position):
+    assert sheet.evaluate('(dialog, previous) => dialog === previous && dialog.isConnected', previous)
+    assert abs(sheet.evaluate('dialog => dialog.scrollTop') - position) <= 1
+
+
 def close_prompt(page, sheet, exit_label, method, trigger):
     if method == 'button':
         sheet.get_by_role('button', name=exit_label, exact=True).click()
@@ -120,7 +133,11 @@ def verify_empty_home(fixture):
     page, errors = fixture.open_page(320, 568)
     home = page.get_by_role('main')
     trigger = home.get_by_role('button', name=HOME_ACTION, exact=True)
-    expect(home.get_by_role('button', name='Add lessons', exact=True)).to_be_visible()
+    add = home.get_by_role('button', name='Add lessons', exact=True)
+    expect(add).to_be_visible()
+    assert trigger.evaluate("button => button.classList.contains('primary')")
+    assert trigger.bounding_box()['y'] < add.bounding_box()['y']
+    expect(trigger).to_be_in_viewport()
     expect(page.locator('body.dark')).to_be_visible()
     requests = observe_prompt_effects(page)
     before = fixture.state()
@@ -144,7 +161,7 @@ def verify_empty_home(fixture):
     expect(sheet).to_be_hidden()
     assert not errors, errors
     page.context.close()
-    print('PASS empty dark Home, keyboard containment, all exits, 200% content zoom and reload at 320×568.')
+    print('PASS primary/cue-first empty dark Home, keyboard containment, all exits, 200% content zoom and reload at 320×568.')
 
 
 def verify_stalled_account(fixture):
@@ -159,15 +176,18 @@ def verify_stalled_account(fixture):
     trigger = page.get_by_role('button', name=HOME_ACTION, exact=True)
     sheet = enter_prompt(page, trigger, HOME_TITLE)
     expect_home_prompt(sheet)
+    previous, position = scroll_open_prompt(page, sheet)
     assert pending, 'The fixture must actually have held a state request'
     pending.pop(0).continue_()
     expect(page.locator('.home-screen h1')).to_have_text('Home')
     expect_home_prompt(sheet)
+    expect_retained_prompt(sheet, previous, position)
     expect(sheet.get_by_role('heading', name=HOME_TITLE, exact=True)).to_be_focused()
+    page.evaluate("document.documentElement.style.removeProperty('zoom')")
     close_prompt(page, sheet, HOME_EXIT, 'button', trigger)
     assert not errors, errors
     page.context.close()
-    print('PASS Home cue while account verification is pending and after it settles at 320×568.')
+    print('PASS Home cue node, scroll and heading focus across delayed owner verification at 320×568.')
 
 
 def verify_offline_home(fixture):
@@ -218,11 +238,32 @@ def expect_paused_phrase(page, cue, position):
 def verify_playing_home_prompt(fixture):
     page, errors = fixture.open_page(320, 568)
     before = fixture.state()['data']
-    resume = page.get_by_role('button', name='Resume lesson', exact=True)
+    home = page.get_by_role('main')
+    resume = home.get_by_role('button', name='Resume lesson', exact=True)
+    trigger = home.get_by_role('button', name=HOME_ACTION, exact=True)
     expect(resume).to_contain_text(LESSON_TITLE)
+    expect(trigger).to_be_visible()
+    page.wait_for_function('''() => {
+        const resume = document.querySelector('.home-resume');
+        const cue = document.querySelector('#home-speaking-prompt');
+        return resume && cue && resume.getBoundingClientRect().top < cue.getBoundingClientRect().top;
+    }''')
     resume.click()
+    expect_paused_phrase(page, PHRASES[0], PHRASES[0]['start'])
     page.get_by_role('button', name='Play', exact=True).click()
     wait_for_audio(page, '!audio.paused && audio.currentTime > .35')
+
+    # Hold the first ordinary checkpoint request so it settles with the cue open.
+    checkpoint_request = []
+    state_url = fixture.origin + '/api/state'
+
+    def hold_first_save(route):
+        if route.request.method == 'PUT' and not checkpoint_request:
+            checkpoint_request.append(route)
+        else:
+            route.continue_()
+
+    page.route(state_url, hold_first_save)
     page.get_by_role('button', name='Back', exact=True).click()
     expect(page.get_by_role('heading', name='Home', exact=True)).to_be_visible()
     compact = page.get_by_role('region', name='Current audio lesson', exact=True)
@@ -230,13 +271,29 @@ def verify_playing_home_prompt(fixture):
     wait_for_audio(page, '!audio.paused && audio.currentTime > .55')
     position_before_prompt = page.evaluate(CUE_CLOCK + '.currentTime')
 
-    trigger = page.get_by_role('button', name=HOME_ACTION, exact=True)
     requests = observe_prompt_effects(page)
     sheet = enter_prompt(page, trigger, HOME_TITLE)
     expect_home_prompt(sheet)
     wait_for_audio(page, 'audio.paused && !audio.seeking')
     position = page.evaluate(CUE_CLOCK + '.currentTime')
     assert position >= position_before_prompt - .06, 'Opening the cue must not seek backward'
+
+    previous, _ = scroll_open_prompt(page, sheet)
+    exit_button = sheet.get_by_role('button', name=HOME_EXIT, exact=True)
+    exit_button.focus()
+    expect(exit_button).to_be_focused()
+    focused_control = exit_button.element_handle()
+    scroll_position = sheet.evaluate('dialog => dialog.scrollTop')
+    assert scroll_position > 0
+    old_home = page.locator('.home-screen').element_handle()
+    assert checkpoint_request, 'The ordinary playback save must be held while the cue is open'
+    with page.expect_response(lambda response: response.url == state_url and response.request.method == 'PUT') as saved_response:
+        checkpoint_request[0].continue_()
+    assert saved_response.value.ok
+    page.wait_for_function('previous => !previous.isConnected', arg=old_home)
+    expect_retained_prompt(sheet, previous, scroll_position)
+    expect(exit_button).to_be_focused()
+    assert focused_control.evaluate('button => button.isConnected && button === document.activeElement')
 
     # One normal playback checkpoint is allowed when Home interrupts listening.
     saved = fixture.wait_for_library(
@@ -259,14 +316,15 @@ def verify_playing_home_prompt(fixture):
 
     # The original controls still exist, but cannot get focus or run shortcuts.
     control = page.locator('#compact-toggle')
+    heading = sheet.get_by_role('heading', name=HOME_TITLE, exact=True)
+    heading.focus()
     assert control.evaluate('element => Boolean(element.closest("[inert]"))')
     control.evaluate('element => element.focus()')
-    expect(sheet.get_by_role('heading', name=HOME_TITLE, exact=True)).to_be_focused()
+    expect(heading).to_be_focused()
     for key in ('Space', 'ArrowRight', 'r', 'q'):
         page.keyboard.press(key)
     expect(sheet).to_be_visible()
 
-    page.evaluate("document.documentElement.style.zoom = '2'")
     expect_reachable_exit(sheet, HOME_EXIT)
     assert sheet.evaluate('''dialog => {
         const rect = dialog.getBoundingClientRect();
@@ -285,7 +343,7 @@ def verify_playing_home_prompt(fixture):
     wait_for_audio(page, '!audio.paused && audio.currentTime > target + .05', position)
     assert not errors, errors
     page.context.close()
-    print('PASS active native Home compact pause, inert controls, populated 200% content zoom and explicit Play.')
+    print('PASS Resume paused until explicit Play, native Home compact pause, and stable focused cue during checkpoint save at 320×568.')
 
 
 def practice_options(page):
@@ -312,8 +370,11 @@ def verify_automatic_transfer(fixture):
     expect(transport).to_be_enabled()
     transport.click()
     wait_for_audio(page, '!audio.paused && audio.currentTime > .25')
+    direct = page.locator('#player-transfer-prompt')
+    expect(direct).to_be_hidden()
     wait_for_audio(page, 'audio.paused && Math.abs(audio.currentTime - target) < .08', PHRASES[0]['end'])
     expect(transport).to_have_attribute('aria-label', 'Pause')
+    expect(direct).to_be_visible(timeout=1500)
     options, trigger = practice_options(page)
     expect(transport).to_have_attribute('aria-label', 'Pause')
     position = page.evaluate(CUE_CLOCK + '.currentTime')
@@ -343,6 +404,55 @@ def verify_automatic_transfer(fixture):
     assert not errors, errors
     page.context.close()
     print('PASS native Automatic pause cancellation and return to Practice at 390×844.')
+
+
+def verify_direct_transfer(fixture):
+    page, errors = fixture.open_page(820, 1180, mobile=False)
+    page.get_by_role('button', name='Resume lesson', exact=True).click()
+    player = page.get_by_role('main', name='Practice player', exact=True)
+    queue = page.get_by_role('complementary', name='Phrase queue', exact=True)
+    expect(queue).to_be_visible()
+    expect_paused_phrase(page, PHRASES[0], .25)
+    trigger = player.locator('#player-transfer-prompt')
+    expect(trigger).to_have_accessible_name(TRANSFER_ACTION)
+    expect(trigger).to_be_in_viewport()
+    assert trigger.bounding_box()['height'] >= 44
+
+    for name in ('Next phrase', 'Phrase queue', 'Compare recordings', 'Play'):
+        control = player.get_by_role('button', name=name, exact=True)
+        expect(control).to_be_in_viewport()
+        control.click(trial=True)
+        assert control.evaluate('''button => {
+            const rect = button.getBoundingClientRect();
+            return button.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+        }'''), f'The open tablet queue intercepts {name}'
+
+    requests = observe_prompt_effects(page)
+    before = fixture.state()
+    audio = page.evaluate_handle(CUE_CLOCK)
+    for method in ('button', 'escape', 'back'):
+        sheet = enter_prompt(page, trigger, TRANSFER_TITLE)
+        expect_transfer_prompt(sheet)
+        assert PHRASES[0]['text'] not in sheet.inner_text()
+        expect_keyboard_containment(page, sheet)
+        close_prompt(page, sheet, PLAYER_TRANSFER_EXIT, method, trigger)
+        expect(queue.locator('.phrase-row.selected')).to_have_attribute('data-row-id', PHRASES[0]['id'])
+        expect(page.get_by_role('dialog', name='Options', exact=True)).to_be_hidden()
+        expect_paused_phrase(page, PHRASES[0], .25)
+        assert audio.evaluate(f'previous => previous === {CUE_CLOCK}'), 'Cue exit replaced the native source'
+
+    page.go_forward()
+    expect(sheet).to_be_visible()
+    expect(sheet.get_by_role('heading', name=TRANSFER_TITLE, exact=True)).to_be_focused()
+    wait_for_audio(page, 'audio.paused && !audio.seeking && Math.abs(audio.currentTime - target) < .06', .25)
+    close_prompt(page, sheet, PLAYER_TRANSFER_EXIT, 'button', trigger)
+    expect(queue.locator('.phrase-row.selected')).to_have_attribute('data-row-id', PHRASES[0]['id'])
+    page.wait_for_timeout(1200)
+    expect_no_prompt_effects(page, fixture, requests)
+    assert fixture.state() == before
+    assert not errors, errors
+    page.context.close()
+    print('PASS 820×1180 tablet queue hit targets, direct transfer exits/Forward, native clock and selected queue row.')
 
 
 def verify_transfer_context(fixture):
@@ -426,6 +536,7 @@ def run():
         verify_offline_home(fixture)
         verify_automatic_transfer(fixture)
         seed_lesson(fixture, audio, theme='dark', mode='continuous', queue=True)
+        verify_direct_transfer(fixture)
         verify_transfer_context(fixture)
         seed_lesson(fixture, audio, theme='dark', mode='continuous', with_course=True)
         verify_playing_home_prompt(fixture)

@@ -12,14 +12,14 @@ function loadYouTubeAPI(){
    setTimeout(()=>{if(!window.YT?.Player)reject(Error('YouTube player timed out. Please retry.'));},18000);
  });return apiPromise.catch(e=>{apiPromise=null;throw e;});
 }
-export const warmYouTube=()=>loadYouTubeAPI().catch(()=>null);
+export const isYouTubeVideoId=id=>typeof id==='string'&&/^[\w-]{11}$/.test(id);
 export const usesUploadedAudio=lesson=>!!(lesson?.audio?.id&&lesson.audio.url==='/api/audio/'+lesson.audio.id&&/^[a-f0-9-]{36}$/.test(lesson.audio.id)&&lesson.mediaSource!=='youtube');
 export class PlayerEngine {
  constructor(){
    this.wantsPlayback=false;this.phraseDone=false;this.mediaIdentity='';this.generation=0;this.yt=null;this.ready=false;this.initialising=null;this.error='';this.lesson=null;this.phrase=null;this.mode='continuous';this.loop=false;this.playing=false;this.state='idle';
    this.speed=1;this.requestedSpeed=1;this.leadIn=0;this.config={pauseType:'duration',fixedPause:4,multiplier:1.5};
    this.selection='all';this.range=null;this.speakers=[];this.time=0;this.duration=0;this.timer=null;this.waitTimer=null;this.token=0;this.lastSample=null;
-   this.pendingSeek=null;this.failedSeek=null;this.lastClock=null;this.promptPause=null;
+   this.pendingSeek=null;this.failedSeek=null;this.lastClock=null;this.promptPause=null;this.videoCued=false;
    this.onPractised=()=>{};this.previewEnd=null;this.session=null;this.onChange=()=>{};this.onTick=()=>{};this.onError=()=>{};this.onSave=()=>{};this.lastSave=0;
  }
  async initialise(){
@@ -34,10 +34,10 @@ export class PlayerEngine {
    let readyTimeout;const generation=this.generation;
    try{
      if(usesUploadedAudio(this.lesson)){await this.createAudio(generation);return;}
-     const YT=await loadYouTubeAPI();if(generation!==this.generation)return;
      // A valid videoId must be supplied at construction. Undefined aborts the real API.
      const videoId=this.lesson.videoId;
-     if(!/^[a-zA-Z0-9_-]{11}$/.test(videoId))throw Error('This lesson has an invalid YouTube video ID.');
+     if(!isYouTubeVideoId(videoId))throw Error('This lesson has an invalid YouTube video ID.');
+     const YT=await loadYouTubeAPI();if(generation!==this.generation)return;
      const loaded=await new Promise((resolve,reject)=>{
        const candidate=new YT.Player('yt-player',{width:'100%',height:'100%',videoId,
          playerVars:{playsinline:1,controls:1,rel:0,origin:location.origin,start:Math.floor(this.time),autoplay:0},
@@ -58,8 +58,7 @@ export class PlayerEngine {
        readyTimeout=setTimeout(()=>reject(Error('YouTube did not become ready. Check your connection and retry.')),18000);
      });
      clearTimeout(readyTimeout);if(generation!==this.generation)return;this.yt=loaded;this.ready=true;this.state='ready';this.error='';
-     if(this.lesson)this.yt.cueVideoById({videoId:this.lesson.videoId,startSeconds:this.time});
-     this.beginSeek(this.time);this.applySpeed();this.armClock();this.onChange();
+     this.cueVideo();this.applySpeed();this.armClock();this.onChange();
    }catch(e){clearTimeout(readyTimeout);if(generation!==this.generation)return;this.ready=false;this.state='error';this.error=e.message;this.onError(e.message);this.onChange();}
  }
  async createAudio(generation){
@@ -96,7 +95,7 @@ export class PlayerEngine {
  }
  async retry(){
    if(this.initialising)return this.initialising;
-   this.generation++;this.resetPromptSource();this.stopClock();this.cancel();this.yt?.destroy?.();this.yt=null;this.ready=false;
+   this.generation++;this.videoCued=false;this.resetPromptSource();this.stopClock();this.cancel();this.yt?.destroy?.();this.yt=null;this.ready=false;
    this.resetHost();return this.initialise();
  }
  applySpeed(){
@@ -126,10 +125,11 @@ export class PlayerEngine {
      if(this.pendingSeek)this.pendingSeek.started=Date.now();
    }
    // Completion from the old location must never finish the newly requested phrase.
-   if((this.pendingSeek||this.failedSeek!==null)&&s===YT_STATES.ENDED)return;
+   if((this.videoCued||this.pendingSeek||this.failedSeek!==null)&&s===YT_STATES.ENDED)return;
    if(this.failedSeek!==null&&s===YT_STATES.PLAYING){this.yt?.pauseVideo();return;}
    if(this.pendingSeek&&s===YT_STATES.PLAYING&&!this.wantsPlayback){this.yt?.pauseVideo();return;}
    if(this.pendingSeek&&s===YT_STATES.PAUSED&&this.wantsPlayback)return;
+   if(s===YT_STATES.PLAYING)this.videoCued=false;
    if(!this.pendingSeek&&s===YT_STATES.PLAYING&&this.previewEnd===null){const cur=this.yt?.getCurrentTime?.();if(Number.isFinite(cur)&&Math.abs(cur-this.time)>.1&&(this.mode==='continuous'||!this.inPhraseContext(cur)))this.reconcileClock(cur);}
    if(s===YT_STATES.PLAYING){this.wantsPlayback=true;this.error='';this.state='playing';this.playing=true;this.lastSample=null;if(this.previewEnd===null)this.startSession();}
    else if(s===YT_STATES.BUFFERING){if(this.wantsPlayback)this.state='buffering';this.playing=false;this.lastSample=null;}
@@ -140,10 +140,9 @@ export class PlayerEngine {
    this.onChange();
  }
  load(lesson,prefs={}){
-   this.pendingSeek=null;this.failedSeek=null;this.lastClock=null;
+   this.pendingSeek=null;this.failedSeek=null;this.lastClock=null;this.videoCued=false;
    this.wantsPlayback=false;this.yt?.pauseVideo?.();this.cancel();this.error='';this.phraseDone=false;
    const identity=usesUploadedAudio(lesson)?'audio:'+lesson.audio.id+':'+(lesson.audioOffset||0):'youtube:'+lesson.videoId;
-   const changed=this.lesson?.videoId!==lesson.videoId;
    if(this.mediaIdentity!==identity)this.resetPromptSource();
    if(this.mediaIdentity!==identity&&this.mediaIdentity){this.generation++;this.yt?.destroy?.();this.yt=null;this.ready=false;this.initialising=null;this.stopClock();this.resetHost();}
    this.mediaIdentity=identity;
@@ -159,14 +158,26 @@ export class PlayerEngine {
    if(this.mode!=='continuous'&&first&&this.time<first.start-this.leadIn)this.time=Math.max(0,first.start-this.leadIn);
    this.phraseDone=this.mode!=='continuous'&&!!this.phrase&&this.time>=this.phrase.end;this.duration=lesson.duration||0;this.lastClock=this.time;
    this.playing=false;this.state=this.ready?'ready':'loading';
-   if(this.ready&&this.yt){ if(changed)this.yt.cueVideoById({videoId:lesson.videoId,startSeconds:this.time});this.beginSeek(this.time);this.applySpeed(); }
+   if(this.ready&&this.yt){
+     if(this.yt instanceof AudioAdapter)this.beginSeek(this.time);
+     else this.cueVideo();
+     this.applySpeed();
+   }
    this.onChange();
  }
  cancel(){this.previewEnd=null;this.token++;if(this.waitTimer){clearTimeout(this.waitTimer);this.waitTimer=null;}this.lastSample=null;}
  current(){return this.phrase;}
+ cueVideo(){
+   // A seek from a cued iframe can play it. Defer the seek until Play.
+   this.videoCued=true;
+   this.yt.cueVideoById({videoId:this.lesson.videoId,startSeconds:this.time});
+   this.lastClock=Math.abs((this.yt.getCurrentTime?.()??NaN)-this.time)<.005?this.time:null;
+ }
  beginSeek(target){
    if(this.promptPause&&!this.promptPause.open)this.promptPause.freezeClock=false;
    target=this.sourceTarget(target)??target;this.time=target;
+   if(this.videoCued&&!this.wantsPlayback){this.cueVideo();return;}
+   this.videoCued=false;
    const origin=this.yt?.getCurrentTime?.();
    this.pendingSeek={target,origin,started:Date.now()};this.failedSeek=null;this.lastSample=null;
    this.yt?.seekTo(target,true);
@@ -260,8 +271,9 @@ export class PlayerEngine {
    if(this.failedSeek!==null){this.beginSeek(this.failedSeek);}
    if(this.mode!=='continuous'&&this.phrase&&(this.phraseDone||this.time>=this.phrase.end))this.seekPhrase(this.phrase.id,false);
    if(this.sourceTarget(this.time,this.phrase)===null)return;
-   if(this.promptPause?.freezeClock&&(this.pendingSeek||Math.abs(this.yt.getCurrentTime()-this.time)>.04))this.beginSeek(this.time);
-   this.phraseDone=false;this.wantsPlayback=true;this.error='';this.state='buffering';this.yt.playVideo();this.onChange();const token=this.token;setTimeout(()=>{if(this.token===token&&this.state==='buffering'&&!this.playing&&this.yt?.getPlayerState?.()!==1){this.state='stalled';this.error='Playback is taking longer to start. Check your connection or retry.';this.onChange();}},8000);
+   this.phraseDone=false;this.wantsPlayback=true;this.error='';this.state='buffering';
+   if(this.videoCued||(this.promptPause?.freezeClock&&(this.pendingSeek||Math.abs(this.yt.getCurrentTime()-this.time)>.04)))this.beginSeek(this.time);
+   this.yt.playVideo();this.onChange();const token=this.token;setTimeout(()=>{if(this.token===token&&this.state==='buffering'&&!this.playing&&this.yt?.getPlayerState?.()!==1){this.state='stalled';this.error='Playback is taking longer to start. Check your connection or retry.';this.onChange();}},8000);
  }
  pause({save=true}={}){this.wantsPlayback=false;const failed=this.state==='error';this.cancel();this.yt?.pauseVideo();this.playing=false;this.state=failed?'error':'paused';if(!failed)this.error='';this.onChange();if(save)this.onSave();}
  pauseForPrompt({save=false}={}){
@@ -334,6 +346,7 @@ export class PlayerEngine {
        this.promptPause.freezeClock=false;
      }
      if(this.yt.getDuration){const dur=this.yt.getDuration();if(dur>0&&dur!==this.duration){this.duration=dur;if(!this.lesson.duration){this.lesson.duration=dur;this.onSave('checkpoint');}}}
+     if(this.videoCued&&this.lastClock===null&&Math.abs(cur-this.time)>.04)return;
      const jump=Number.isFinite(this.lastClock)&&Math.abs(cur-this.lastClock)>Math.max(.35,this.speed*.3);
      const external=this.yt?.isSeeking?.();if(external){this.lastSample=null;return;}
      if(this.previewEnd===null&&this.mode!=='continuous'&&!this.playing&&!this.phraseDone&&cur!==this.lastClock&&!this.inPhraseContext(cur)){
@@ -380,5 +393,5 @@ export class PlayerEngine {
      coveredIds:this.lesson.phrases.filter(p=>coverage.some(([a,b])=>a<p.end&&b>p.start)).map(p=>p.id),
      practised:marks.practised.size,difficult:marks.difficult.size};
  }
- destroy(){this.generation++;this.pendingSeek=null;this.promptPause=null;this.stopClock();this.cancel();this.yt?.destroy?.();}
+ destroy(){this.generation++;this.pendingSeek=null;this.promptPause=null;this.videoCued=false;this.stopClock();this.cancel();this.yt?.destroy?.();}
 }

@@ -1,6 +1,26 @@
 import {getPaletteSync} from './vendor-colorthief.mjs';
+import {isManagedMediaPath} from './library-mutations.mjs';
+import {isYouTubeVideoId,usesUploadedAudio} from './player.mjs';
 const pending=new Set(),VERSION=1;
 const clamp=(n,a,b)=>Math.min(b,Math.max(a,n));
+function managedArtworkURL(url){
+ if(isManagedMediaPath(url))return url;
+ if(typeof url!=='string'||!/^https?:\/\//i.test(url))return null;
+ try{
+  const {origin,pathname,username,password}=new URL(url);
+  if(origin===globalThis.location?.origin&&!username&&!password&&isManagedMediaPath(pathname))return pathname;
+ }catch{}
+ return null;
+}
+export function artworkURL(item,{allowYouTube=false,large=false}={}){
+ for(const asset of [item?.thumbnail,item?.frame,item?.cover]){
+  const local=managedArtworkURL(asset?.url);
+  if(local)return local;
+ }
+ const id=item?.videoId;
+ if(!allowYouTube||usesUploadedAudio(item)||!isYouTubeVideoId(id))return null;
+ return `https://i.ytimg.com/vi/${id}/${large?'hqdefault':'mqdefault'}.jpg`;
+}
 export function rgbToHsl([r,g,b]){
  [r,g,b]=[r,g,b].map(x=>clamp(Number(x)||0,0,255)/255);
  const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min,l=(max+min)/2;
@@ -20,13 +40,15 @@ export function applyAmbient(lesson){
  const cached=validPalette(lesson?.ambientPalette,lesson?.videoId)?lesson.ambientPalette.colours.map(fromHex):[];
  for(const [key,value] of Object.entries(refinePalette(cached,lesson?.videoId||'echo')))document.body.style.setProperty('--ambient-'+key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase()),value);
 }
-export async function prepareAmbient(lesson,save){
+export async function prepareAmbient(lesson,save,{allowYouTube=false}={}){
  const key=lesson?.id||lesson?.videoId;if(!lesson||validPalette(lesson.ambientPalette,lesson.videoId)||pending.has(key))return;
+ const options={allowYouTube,large:true},url=artworkURL(lesson,options);
+ if(!url)return;
  pending.add(key);let colours=[],source='fallback';
  try{
   const img=new Image();img.crossOrigin='anonymous';img.decoding='async';
-  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{img.src='';reject(Error('Thumbnail timeout'));},5000);img.onload=()=>{clearTimeout(timer);resolve();};img.onerror=()=>{clearTimeout(timer);reject(Error('Thumbnail unavailable'));};img.src=lesson.thumbnail?.url||lesson.frame?.url||`https://i.ytimg.com/vi/${encodeURIComponent(lesson.videoId)}/hqdefault.jpg`;});
+  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{img.removeAttribute('src');reject(Error('Thumbnail timeout'));},5000);img.onload=()=>{clearTimeout(timer);resolve();};img.onerror=()=>{clearTimeout(timer);reject(Error('Thumbnail unavailable'));};img.src=url;});
   colours=getPaletteSync(img,{colorCount:6,quality:15}).map(c=>c.hex());source='thumbnail';
  }catch{/* Colour extraction never blocks playback. */}
- try{save({version:VERSION,videoId:lesson.videoId,colours,source});}finally{pending.delete(key);}
+ try{if(artworkURL(lesson,options)===url)save({version:VERSION,videoId:lesson.videoId,colours,source});}finally{pending.delete(key);}
 }
