@@ -37,62 +37,27 @@ test('Next marks the current phrase Practised and immediately starts the next; r
 test('automatic advancement does not mark phrases Practised',async t=>{
  const {e}=await fixture(t);const marked=[];e.onPractised=id=>marked.push(id);await e.initialise();e.setMode('automatic');e.play();e.yt.time=29;e.tick();t.mock.timers.tick(4000);assert.equal(e.phrase.id,'b');assert.deepEqual(marked,[]);
 });
-test('a cancelled pending play cannot resume after the prompt even with a matching late adapter state',async t=>{
+test('a stalled YouTube start reports blocking and a later Play can start a session',async t=>{
  const {e}=await fixture(t);
  await e.initialise();
  const source=e.yt, emit=state=>source.config.events.onStateChange({data:state});
- const saves=[], marks=[];
- e.onSave=reason=>saves.push(reason);
- e.onPractised=id=>marks.push(id);
  source.playVideo=()=>{source.state=3;emit(3);};
- let pauses=0;
- source.pauseVideo=()=>{pauses++;};
  e.play();
  t.mock.timers.tick(8000);
  assert.equal(e.state,'stalled');
- saves.length=0;
- const position=e.time;
-
- e.pauseForPrompt();
- assert.equal(e.timer,null);
- e.play();e.next();e.seekRecording(31,true);
- source.state=1;emit(1);
- source.time=31.4;e.tick();
- emit(0);
- assert.equal(pauses,2);
- assert.equal(e.time,position);
  assert.equal(e.current().id,'a');
-
- e.releasePrompt();
- await Promise.resolve();
- assert.notEqual(e.timer,null);
- source.state=1;emit(1);
- assert.equal(pauses,3);
- source.state=2;emit(2);
- source.state=1;emit(1);
- assert.equal(pauses,4);
- source.state=2;emit(2);emit(0);
- source.config.events.onAutoplayBlocked();
- e.tick();
- assert.equal(e.state,'paused');
- assert.equal(e.time,position);
  assert.equal(e.session,null);
  assert.deepEqual(e.lesson.progress.coverage,[]);
- assert.deepEqual(saves,[]);
- assert.deepEqual(marks,[]);
+ source.config.events.onAutoplayBlocked();
+ assert.equal(e.state,'blocked');
 
  e.play();
  assert.equal(e.state,'buffering');
- t.mock.timers.tick(8000);
- assert.equal(e.state,'stalled');
- source.config.events.onAutoplayBlocked();
- assert.equal(e.state,'blocked');
- e.play();
  source.state=1;emit(1);
  assert.equal(e.playing,true);
  assert.ok(e.session);
 });
-test('speaking prompts interrupt automatic waits while preserving the clock, queue and practice metrics',async t=>{
+test('Pause cancels an automatic wait and preserves the cue, queue and practice metrics',async t=>{
  const {e}=await fixture(t);
  await e.initialise();
  e.setMode('automatic');
@@ -109,10 +74,7 @@ test('speaking prompts interrupt automatic waits while preserving the clock, que
  const saves=[];
  e.onSave=reason=>saves.push(reason);
 
- e.pauseForPrompt({save:true});
- e.pauseForPrompt({save:true});
- e.releasePrompt();
- e.yt.time=31.4;
+ e.pause();
  t.mock.timers.tick(12000);
  assert.equal(e.state,'paused');
  assert.equal(e.time,29);
@@ -129,24 +91,23 @@ test('speaking prompts interrupt automatic waits while preserving the clock, que
  assert.equal(e.playing,true);
  assert.equal(e.yt.time,27);
 });
-test('a prompt on an empty Home also holds a lesson prepared after first verification',async t=>{
- const {e}=await fixture(t);
- const empty=new e.constructor(), saves=[];
- t.after(()=>empty.destroy());
- empty.onSave=reason=>saves.push(reason);
- empty.pauseForPrompt({save:true});
- empty.load(lesson(),{mode:'manual'});
- await empty.initialise();
- empty.yt.state=1;empty.yt.config.events.onStateChange({data:1});
- assert.equal(empty.yt.state,2);
- assert.equal(empty.playing,false);
- assert.equal(empty.session,null);
- assert.deepEqual(saves,[]);
- empty.releasePrompt();
- empty.play();
- assert.equal(empty.playing,true);
+test('an initial YouTube cue and a paused seek defer playback until Play',async t=>{
+ const {e,calls}=await fixture(t);
+ await e.initialise();
+ assert.equal(e.yt.config.playerVars.autoplay,0);
+ assert.equal(e.videoCued,true);
+ e.seekRecording(31.5,false);
+ assert.equal(e.time,31.5);
+ assert.equal(e.playing,false);
+ assert.equal(e.session,null);
+ assert.equal(calls.filter(call=>Array.isArray(call)&&call[0]==='seek').length,0);
+ assert.equal(calls.includes('play'),false);
+
+ e.play();
+ assert.deepEqual(calls.slice(-2),[['seek',31.5],'play']);
+ assert.equal(e.playing,true);
 });
-test('an explicit paused native seek settles normally after dismissal and the native timer returns to idle',async t=>{
+test('a native seek settles after Pause and the native timer returns to idle',async t=>{
  const {e}=await fixture(t);
  const priorAudio=globalThis.Audio;
  class NativeAudio extends EventTarget {
@@ -166,8 +127,6 @@ test('an explicit paused native seek settles normally after dismissal and the na
  t.after(()=>{globalThis.Audio=priorAudio;});
  const empty=new e.constructor();
  t.after(()=>empty.destroy());
- empty.pauseForPrompt();
- empty.releasePrompt();
  const id='00000000-0000-4000-8000-000000000001';
  empty.load({...lesson(),audio:{id,url:'/api/audio/'+id}},{mode:'manual'});
  await empty.initialise();
@@ -179,14 +138,8 @@ test('an explicit paused native seek settles normally after dismissal and the na
  empty.seekPhrase('b',true);
  assert.equal(empty.pendingSeek.target,31);
  assert.notEqual(empty.timer,null);
- empty.pauseForPrompt();
- assert.equal(empty.timer,null);
- t.mock.timers.tick(12000);
+ empty.pause();
  assert.equal(empty.pendingSeek.target,31);
- assert.equal(empty.timer,null);
-
- empty.releasePrompt();
- await Promise.resolve();
  assert.notEqual(empty.timer,null);
  audio.settle();
  t.mock.timers.tick(20);
@@ -204,14 +157,12 @@ test('an explicit paused native seek settles normally after dismissal and the na
  assert.equal(empty.current().id,'a');
  assert.equal(audio.paused,true);
 });
-test('a new lesson discards the old prompt fence and old adapter events',async t=>{
+test('a new lesson discards old adapter events while its own iframe can start playback',async t=>{
  const {e}=await fixture(t);
  await e.initialise();
  const original=e.yt;
  e.play();
  assert.equal(e.playing,true);
- e.pauseForPrompt();
- e.releasePrompt();
 
  const replacement={...lesson(),id:'replacement',videoId:'dQw4w9WgXcQ'};
  e.load(replacement,{mode:'continuous'});
@@ -223,11 +174,11 @@ test('a new lesson discards the old prompt fence and old adapter events',async t
  assert.equal(e.duration,80);
  original.state=1;original.config.events.onStateChange({data:1});
  original.state=0;original.config.events.onStateChange({data:0});
+ original.config.events.onAutoplayBlocked();
  assert.equal(e.playing,false);
  assert.equal(e.session,null);
+ assert.equal(e.error,'');
 
- e.pauseForPrompt();
- e.releasePrompt();
  e.yt.playVideo();
  assert.equal(e.playing,true);
  assert.equal(e.session.lessonId,replacement.id);

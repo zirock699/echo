@@ -1,4 +1,4 @@
-"""Verify Rehearsal Desk alignment, drills, and the Journal return journey."""
+"""Verify player alignment, docked queue access, and the Journal return journey."""
 
 import io
 import wave
@@ -72,14 +72,14 @@ def check_transport(fixture, audio, width, height):
     page.context.close()
 
 
-def check_docked_queue(fixture, audio):
-    page, errors = open_player(fixture, audio, 1440, 900, mobile=False)
+def check_docked_queue(fixture, audio, width, height):
+    page, errors = open_player(fixture, audio, width, height, mobile=width < 1000)
     opener = page.get_by_role('button', name='Phrase queue', exact=True)
     queue = page.get_by_role('complementary', name='Phrase queue', exact=True)
     closed = positions(page, transcript=False)
     opener.press('Enter')
     expect(queue.locator('.phrase-row.selected')).to_have_attribute('data-row-id', 'deadline')
-    assert_aligned(closed, positions(page, transcript=False), '1440×900 docked queue opened')
+    assert_aligned(closed, positions(page, transcript=False), f'{width}×{height} docked queue opened')
     assert page.evaluate('''selectors => {
         const stage = document.querySelector('.phrase-panel').getBoundingClientRect();
         const queue = document.querySelector('.queue-panel').getBoundingClientRect();
@@ -88,10 +88,10 @@ def check_docked_queue(fixture, audio):
             const {left, top, width, height} = button.getBoundingClientRect();
             return button.contains(document.elementFromPoint(left + width / 2, top + height / 2));
         });
-    }''', list(closed)), 'The queue must leave the transcript and transport usable'
+    }''', [*closed, '#phrase-queue-toggle', '#mirror-compare']), 'The queue must leave the transcript and transport usable'
     opener.press('Enter')
     expect(queue).to_have_count(0)
-    assert_aligned(closed, positions(page, transcript=False), '1440×900 docked queue closed')
+    assert_aligned(closed, positions(page, transcript=False), f'{width}×{height} docked queue closed')
     assert not errors, errors
     page.context.close()
 
@@ -154,27 +154,6 @@ def check_journal(fixture, audio):
     print('PASS 390×844 Journal completion, explicit note save, exact paused resume, and Back to the initiating row.')
 
 
-def check_drill_return(fixture):
-    page, errors = fixture.open_page(390, 844)
-    opener = page.get_by_role('button', name='Pick a speaking drill', exact=True)
-    opener.press('Enter')
-    chooser = page.get_by_role('dialog', name='Choose a focus', exact=True)
-    drill = chooser.get_by_role('button', name='Make the key detail clear', exact=True)
-    drill.press('Enter')
-    cue = page.get_by_role('dialog', name='Make the key detail clear', exact=True)
-    expect(cue.get_by_role('heading')).to_be_focused()
-    expect(cue).to_contain_text('The room now opens at half past nine.')
-    page.go_back()
-    expect(cue).to_be_hidden()
-    expect(drill).to_be_focused()
-    page.keyboard.press('Escape')
-    expect(chooser).to_be_hidden()
-    expect(opener).to_be_focused()
-    assert not errors, errors
-    page.context.close()
-    print('PASS 390×844 drill cue and keyboard focus at both return points.')
-
-
 def run():
     with browser_fixture(__doc__, 'native generated WAV and measured transcript/control positions') as fixture:
         wav = io.BytesIO()
@@ -184,10 +163,10 @@ def run():
         audio = fixture.upload_audio(wav.getvalue(), 'audio/wav')
         for width, height in ((320, 568), (844, 390)):
             check_transport(fixture, audio, width, height)
-        check_docked_queue(fixture, audio)
+        for width, height in ((820, 1180), (1440, 900)):
+            check_docked_queue(fixture, audio, width, height)
         print('PASS paused Resume and stable transcript, Replay, Play, and Next through playback and docked queue changes.')
         check_journal(fixture, audio)
-        check_drill_return(fixture)
 
 
 if __name__ == '__main__':

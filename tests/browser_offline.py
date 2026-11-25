@@ -157,6 +157,7 @@ def expect_library(page):
 def expect_locked(page):
     expect(page.get_by_role('heading', name='Library unavailable')).to_be_visible()
     expect(page.get_by_text('Connect and sign in to load your private library.')).to_be_visible()
+    expect(page.get_by_role('button', name='Talk now', exact=True)).to_have_count(0)
     content = page.locator('#app').inner_text()
     assert TITLE not in content and COLLECTION not in content, content
 
@@ -279,11 +280,12 @@ def run():
         with browser_fixture(__doc__, 'built Worker and synthetic private WAV', script=helper) as fixture:
             original = shell_manifest(fixture)
             expected = {'/index.html', '/manifest.webmanifest', '/assets/icon.svg',
-                        '/assets/icon-192.png', '/assets/icon-512.png', '/assets/rehearsal-home.webp',
+                        '/assets/icon-192.png', '/assets/icon-512.png',
                         '/assets/rehearsal-bricolage.woff2', '/assets/rehearsal-instrument.woff2'}
             expected.update(f'/src/{path.name}' for path in (stage / 'original/src').iterdir()
                             if path.is_file() and re.fullmatch(r'[\w-][\w.-]*\.(mjs|css)', path.name))
             assert set(original['assets']) == expected
+            assert {'/assets/rehearsal-home.webp', '/src/practice-cue.mjs'}.isdisjoint(original['assets'])
             private_media = seed_library(fixture)
             page, errors = fixture.open_page(390, 844, service_workers='allow')
             offline_recovery(fixture, page, private_media, original)

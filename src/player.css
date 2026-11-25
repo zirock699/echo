@@ -386,10 +386,9 @@ body.light .player-artwork { filter:blur(24px); opacity:.13; }
 }
 @keyframes transport-wait { to { transform:rotate(360deg); } }
 .practice-footnote {
-  display:grid;
-  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  display:flex;
+  justify-content:center;
   align-items:center;
-  gap:8px;
   width:100%;
   min-width:0;
 }
@@ -412,9 +411,6 @@ body.light .player-artwork { filter:blur(24px); opacity:.13; }
   text-align:center;
   text-decoration:none;
 }
-.practice-footnote .mirror-main-record { grid-column:1; grid-row:1; justify-self:end; }
-.practice-footnote .player-transfer-prompt { grid-column:2; grid-row:1; justify-self:start; }
-.practice-footnote:not(:has(.mirror-main-record)) .player-transfer-prompt { grid-column:1/-1; justify-self:center; }
 .practice-footnote .mirror-main-record.is-recording { color:#fff7eb; background:#9b4333; }
 .practice-footnote .mirror-main-record svg { width:16px; height:16px; }
 .playback-notice { position:absolute; z-index:3; top:4px; right:8px; max-width:calc(100% - 16px); }

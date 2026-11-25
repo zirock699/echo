@@ -23,9 +23,9 @@ JOURNEYS = {
         ('node', '--check', 'dist/server/index.js'),
     ),
     'start': (
-        'Start speaking, resume a lesson and return from a cue',
+        'Add or resume a lesson and browse the home library',
         browser_suite('first_practice'),
-        browser_suite('speaking_prompts'),
+        browser_suite('home'),
     ),
     'prepare': (
         'Import, prepare and validate a reference',

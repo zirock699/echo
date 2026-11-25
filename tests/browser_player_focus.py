@@ -158,7 +158,7 @@ def verify_queue_and_ipa(page):
 
 def verify_import_focus(fixture, page):
     page.go_back()
-    expect(page.get_by_role('heading', name='Rehearse the change.')).to_be_visible()
+    expect(page.get_by_role('main').get_by_role('heading', name='Home', exact=True)).to_be_visible()
     opener = page.locator('#rehearsal-add')
     opener.press('Enter')
     page.get_by_role('dialog', name='Add lessons').get_by_role('button', name='YouTube lesson').click()

@@ -20,12 +20,10 @@ import {PlayerEngine,usesUploadedAudio} from './player.mjs';
 import {transportState,swipeDirection,dismissCompactSwipe} from './practice.mjs';
 import {applyAmbient,artworkURL,prepareAmbient} from './ambient.mjs';
 import {playbackFeedback} from './player-layout.mjs';
-import {practiceCue,practiceDrills,PracticeCueRegion} from './practice-cue.mjs';
-import {renderRehearse,renderJournal,renderDrills} from './rehearsal-ui.mjs';
+import {renderHome,renderJournal} from './rehearsal-ui.mjs';
 const store=new Store(),player=new PlayerEngine(),lyrics=new LyricsScroller();
-const freshUI=()=>({started:false,allowedVideo:null,compactDismissed:false,preparing:false,uploading:false,uploadError:'',queueWasPlaying:false,view:'home',search:'',libraryFilter:'all',sort:'recent',collectionId:null,modal:null,optionsTab:'playback',practicePromptDraft:null,deviceDraftTask:null,deviceDraftError:"",recordingOpen:false,queue:false,queuePage:null,queueMenu:null,homeCategory:'',homeBrowseOpen:false,journalFocus:null,syncDismissed:null,syncRetrying:false,word:null,import:{url:'',title:'',speaker:'',text:'',fileName:'',offset:0,grouping:'original',preview:null,errors:[],warnings:[],format:''},pendingSummary:null});
+const freshUI=()=>({started:false,allowedVideo:null,compactDismissed:false,preparing:false,uploading:false,uploadError:'',queueWasPlaying:false,view:'home',search:'',libraryFilter:'all',sort:'recent',collectionId:null,modal:null,optionsTab:'playback',deviceDraftTask:null,deviceDraftError:"",recordingOpen:false,queue:false,queuePage:null,queueMenu:null,journalFocus:null,syncDismissed:null,syncRetrying:false,word:null,import:{url:'',title:'',speaker:'',text:'',fileName:'',offset:0,grouping:'original',preview:null,errors:[],warnings:[],format:''},pendingSummary:null});
 const ui=freshUI();
-const activePrompt=()=>practiceCue(ui.modal);
 const root=document.querySelector('#app'),dock=document.querySelector('#youtube-dock'),toaster=document.querySelector('#toast');
 const focus=new RenderFocus(root);
 root.addEventListener('click',e=>focus.rememberInvoker(e.target.closest('[data-action],[data-lx],[data-cx],[data-sx]')),{capture:true});
@@ -36,33 +34,31 @@ const recorder=new PracticeRecorder(()=>render());
 const mirror=new EchoMirror({notify:()=>render(),tick:()=>mirrorTick(),pause:()=>player.pause(),restore:time=>{if(current()?.id===mirror.lesson?.id)player.seekRecording(time,false);}});
 const mobileLayout=()=>matchMedia('(max-width:760px), (max-width:1024px) and (max-height:520px) and (pointer:coarse)').matches;
 const navigation=new ScreenHistory({restore:restoreRoute});
+const retiredActivityModals=new Set(['home-prompt','drills','drill-prompt','transfer-prompt']);
 function captureRoute(){
  const modal=ui.modal?.type==='summary'?{type:'summary',sessionId:ui.modal.session.id}:
   ui.modal?Object.fromEntries(Object.entries(ui.modal).filter(([key])=>!['preview','remap'].includes(key))):null;
  return {
-  owner:store.owner,view:ui.view,lessonId:current()?.id||null,modal,optionsTab:ui.optionsTab,queue:ui.queue,homeBrowseOpen:ui.homeBrowseOpen,
+  owner:store.owner,view:ui.view,lessonId:current()?.id||null,modal,optionsTab:ui.optionsTab,queue:ui.queue,
   journalFocus:ui.view==='journal'?ui.journalFocus:null,
   search:{query:searchUI.query,kind:searchUI.kind,limit:searchUI.limit},
   library:{state:{...libraryUI.state},kind:libraryUI.kind,page:libraryUI.page,searchOpen:libraryUI.searchOpen,dialog:libraryUI.dialog},
   collections:{id:collectionsUI.id,query:collectionsUI.query,lessonQuery:collectionsUI.lessonQuery,page:collectionsUI.page,lessonPage:collectionsUI.lessonPage,dialog:collectionsUI.dialog,draftId:collectionsUI.draft.id},
   mirrorPanel:mirror.panelOpen,
-  overlay:!!(ui.modal||libraryUI.dialog||collectionsUI.dialog||mirror.panelOpen||ui.view==='player'&&ui.queue&&mobileLayout()),
-  nestedOverlay:modal?.type==='drill-prompt'||modal?.type==='transfer-prompt'&&modal.from!=='player',transient:!!activePrompt()
+  overlay:!!(ui.modal||libraryUI.dialog||collectionsUI.dialog||mirror.panelOpen||ui.view==='player'&&ui.queue&&mobileLayout())
  };
 }
 function restoreRoute(route){
  if(!store.owner){
-   ui.modal=route.modal?.type==='home-prompt'?{type:'home-prompt'}:null;
+   ui.modal=null;
    render();return;
  }
- const returningToPractice=ui.modal?.type==='transfer-prompt'&&route.modal?.type==='player-settings';
- const returningDrill=ui.modal?.type==='drill-prompt'&&route.modal?.type==='drills'?ui.modal.from:null;
+ const retiredActivity=retiredActivityModals.has(route.modal?.type);
  if(ui.view==='player'&&route.view!=='player')saveProgress();
- const resumeQueue=!activePrompt()&&!route.transient&&ui.queue&&mobileLayout()&&!route.queue&&ui.queueWasPlaying;
+ const resumeQueue=!retiredActivity&&ui.queue&&mobileLayout()&&!route.queue&&ui.queueWasPlaying;
  mirror.exit();recorder.stop();
  ui.view=['home','library','collections','settings','player','search','journal'].includes(route.view)?route.view:'home';
- ui.collectionId=null;ui.modal=route.modal||null;ui.optionsTab=route.optionsTab||'playback';ui.queue=!!route.queue&&ui.view==='player';
- ui.homeBrowseOpen=!!route.homeBrowseOpen;
+ ui.collectionId=null;ui.modal=retiredActivity?null:(route.modal||null);ui.optionsTab=route.optionsTab||'playback';ui.queue=!!route.queue&&ui.view==='player';
  ui.journalFocus=route.journalFocus??null;
  if(ui.modal?.type==='history'){ui.view='journal';ui.modal=null;}
  if(ui.modal?.type==='summary'){
@@ -74,16 +70,14 @@ function restoreRoute(route){
  if(route.library){Object.assign(libraryUI.state,route.library.state);Object.assign(libraryUI,{kind:route.library.kind,page:route.library.page||1,searchOpen:!!route.library.searchOpen,dialog:route.library.dialog||''});}
  const collection=route.collections;if(collection){Object.assign(collectionsUI,{id:collection.id,query:collection.query||'',lessonQuery:collection.lessonQuery||'',page:collection.page||1,lessonPage:collection.lessonPage||1,dialog:collection.dialog||''});if(collectionsUI.dialog==='edit'){const c=store.data.collections.find(c=>c.id===collection.draftId);if(c)collectionsUI.draft={id:c.id,name:c.name};else collectionsUI.dialog='';}if(collectionsUI.dialog==='pick'&&!collectionsUI.collection)collectionsUI.dialog='';}
  if(ui.view==='player'&&route.lessonId&&current()?.id!==route.lessonId){if(store.data.lessons.some(l=>l.id===route.lessonId))openLesson(route.lessonId,{activateYouTube:false});else{ui.view='library';ui.modal=null;ui.queue=false;}}
- if(ui.modal?.type==='transfer-prompt'&&!player.current())ui.modal=null;
  if(ui.modal?.type==='regroup'&&current()){const preview=groupPhrases(current().segments,ui.modal.grouping);ui.modal={...ui.modal,preview,remap:remapStatuses(current().phrases,preview,current().statuses)};}
  if(route.mirrorPanel&&current()&&player.current()){ensureMirror();mirror.togglePanel();}
  render();
- if(returningToPractice){
-   const trigger=root.querySelector('#practice-transfer-prompt');
-   trigger?.focus({preventScroll:true});
-   trigger?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
+ // Older entries can land on the same screen without restoring a retired activity.
+ if(retiredActivity&&navigation.current?.snapshot===route){
+   navigation.current.snapshot={...captureRoute(),scroll:route.scroll};
+   navigation.write(false);
  }
- if(returningDrill&&Object.hasOwn(practiceDrills,returningDrill))root.querySelector(`[data-action="start-drill"][data-id="${returningDrill}"]`)?.focus();
  if(ui.view==='journal'&&ui.journalFocus){
    const opener=document.getElementById(ui.journalFocus.id);
    if(opener?.matches('[data-action="journal-resume"]')&&opener.dataset.id===ui.journalFocus.lessonId)opener.focus({preventScroll:true});
@@ -104,7 +98,6 @@ Object.assign(SVG,{
 });
 const ico=(name,cls='')=>name==='settings'?uiIcon('settings'):`<svg class="${cls}" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[name]||SVG.spark}</svg>`;
 const esc=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const cueRegion=new PracticeCueRegion(root,ico('close'));
 const attr=t=>esc(t);const current=()=>player.lesson;const pref=()=>store.data.preferences;
 const videoAllowed=lesson=>!!lesson?.videoId&&!usesUploadedAudio(lesson)&&ui.allowedVideo===lesson.videoId;
 function initialiseSource(lesson){if(usesUploadedAudio(lesson)||videoAllowed(lesson))player.initialise();}
@@ -129,7 +122,7 @@ function settingsSync(){
  return `<span class="micro">${esc(message)}${action}${copies}</span>`;
 }
 const libraryViews=['library','collections','search'];
-const primaryViews=[['home','Rehearse','home'],['library','Library','library'],['journal','Journal','clock']];
+const primaryViews=[['home','Home','home'],['library','Library','library'],['journal','Journal','clock']];
 function primaryNavigation(className){
  return `<nav class="${className}" aria-label="Main navigation">${primaryViews.map(([view,label,icon])=>{
   const selected=view===ui.view||view==='library'&&libraryViews.includes(ui.view);
@@ -147,13 +140,13 @@ function shell(content){
  const active=current(),fullPlayer=ui.view==='player';
  return `<div class="app-shell rehearsal-shell">
   ${fullPlayer?'':`<header class="rehearsal-masthead"><div class="rehearsal-bar">
-   <button type="button" class="rehearsal-brand" data-action="view" data-view="home" aria-label="Echo Studio, Rehearse"><span>${ico('wave')}</span>Echo Studio</button>
+   <button type="button" class="rehearsal-brand" data-action="view" data-view="home" aria-label="Echo Studio Home"><span>${ico('wave')}</span>Echo Studio</button>
    ${primaryNavigation('rehearsal-nav')}
    <div class="rehearsal-header-actions">${syncHTML()}<button id="rehearsal-add" class="text-link rehearsal-add" type="button" data-action="open-add" aria-label="Add lessons">${ico('plus')}<span>Add</span></button><button id="rehearsal-settings" class="icon-btn" type="button" data-action="settings-shortcut" aria-label="Settings" title="Settings">${ico('settings')}</button></div>
   </div></header>`}
   <div class="page rehearsal-content">${libraryNavigation()}${content}</div>
  </div>${syncBanner()}${fullPlayer?'':primaryNavigation('mobile-nav')}
- ${active&&ui.started&&!ui.compactDismissed&&!fullPlayer?compact():''}${ui.queue&&active?queue():''}${ui.modal&&!activePrompt()?modal():''}${libraryUI.overlay()}${collectionsUI.overlay()}${mirror.panel()}`;
+ ${active&&ui.started&&!ui.compactDismissed&&!fullPlayer?compact():''}${ui.queue&&active?queue():''}${ui.modal?modal():''}${libraryUI.overlay()}${collectionsUI.overlay()}${mirror.panel()}`;
 }
 function syncBanner(){return syncNoticeHTML(store,{dismissed:ui.syncDismissed,retrying:ui.syncRetrying});}
 function listeningDuration(seconds){const total=Math.max(0,Math.round(seconds||0)),minutes=Math.floor(total/60),rest=total%60;return minutes?`${minutes} min${rest?` ${rest} s`:''}`:`${rest} s`;}
@@ -175,14 +168,9 @@ function shelfMoreCard(shelf){
 }
 function home(){
  const data=store.data;
- let browseHTML='';
- if(ui.homeBrowseOpen){
-  const shelves=homeShelves(data);
-  libraryUI.lessonIndex=new Map(data.lessons.map(lesson=>[lesson.id,lesson]));
-  browseHTML=`${shelves.map(shelf=>`<section class="home-shelf ${shelf.items.length<=2?'shelf-compact':''}" aria-labelledby="shelf-${attr(shelf.id)}"><header><h2 id="shelf-${attr(shelf.id)}">${esc(shelf.title)}</h2><div class="shelf-heading-actions">${shelf.hasMore?`<button id="home-more-${attr(shelf.id)}" class="text-link" data-action="home-see-all" data-shelf="${attr(shelf.id)}" aria-label="See all ${attr(shelf.title)}">See all</button>`:''}<div class="shelf-scroll-controls" data-shelf-scroll-controls hidden><button class="icon-btn" data-action="shelf-scroll" data-shelf="${attr(shelf.id)}" data-direction="left" aria-label="Scroll ${attr(shelf.title)} left" aria-controls="home-track-${attr(shelf.id)}">${ico('chevron')}</button><button class="icon-btn" data-action="shelf-scroll" data-shelf="${attr(shelf.id)}" data-direction="right" aria-label="Scroll ${attr(shelf.title)} right" aria-controls="home-track-${attr(shelf.id)}">${ico('chevron','shelf-next')}</button></div></div></header><div id="home-track-${attr(shelf.id)}" class="shelf-track" data-scroll-key="shelf-${attr(shelf.id)}" role="region" aria-label="${attr(shelf.title)}" tabindex="0">${shelf.items.map(entry=>homeShelfCard(entry,shelf.id)).join('')}${shelf.hasMore?shelfMoreCard(shelf):''}</div></section>`).join('')}`;
- }
- return renderRehearse({data,icon:ico,escape:esc,lessonArtwork:lesson=>homeArtwork(lesson,'l'),
-  browseHTML,browseOpen:ui.homeBrowseOpen});
+ libraryUI.lessonIndex=new Map(data.lessons.map(lesson=>[lesson.id,lesson]));
+ const shelvesHTML=homeShelves(data).map(shelf=>`<section class="home-shelf ${shelf.items.length<=2?'shelf-compact':''}" aria-labelledby="shelf-${attr(shelf.id)}"><header><h2 id="shelf-${attr(shelf.id)}">${esc(shelf.title)}</h2><div class="shelf-heading-actions">${shelf.hasMore?`<button id="home-more-${attr(shelf.id)}" class="text-link" data-action="home-see-all" data-shelf="${attr(shelf.id)}" aria-label="See all ${attr(shelf.title)}">See all</button>`:''}<div class="shelf-scroll-controls" data-shelf-scroll-controls hidden><button class="icon-btn" data-action="shelf-scroll" data-shelf="${attr(shelf.id)}" data-direction="left" aria-label="Scroll ${attr(shelf.title)} left" aria-controls="home-track-${attr(shelf.id)}">${ico('chevron')}</button><button class="icon-btn" data-action="shelf-scroll" data-shelf="${attr(shelf.id)}" data-direction="right" aria-label="Scroll ${attr(shelf.title)} right" aria-controls="home-track-${attr(shelf.id)}">${ico('chevron','shelf-next')}</button></div></div></header><div id="home-track-${attr(shelf.id)}" class="shelf-track" data-scroll-key="shelf-${attr(shelf.id)}" role="region" aria-label="${attr(shelf.title)}" tabindex="0">${shelf.items.map(entry=>homeShelfCard(entry,shelf.id)).join('')}${shelf.hasMore?shelfMoreCard(shelf):''}</div></section>`).join('');
+ return renderHome({data,icon:ico,escape:esc,lessonArtwork:lesson=>homeArtwork(lesson,'l'),shelvesHTML});
 }
 function viewContent(){
  switch(ui.view){
@@ -231,19 +219,14 @@ function settings(){
 function statusControls(phrase){const s=current()?.statuses[phrase.id]||{};return `<div class="phrase-flags"><button class="pill ${s.practised?'active':''}" data-action="mark" data-id="${attr(phrase.id)}" data-status="practised" aria-pressed="${!!s.practised}">${ico('check')} ${s.practised?'Practised':'Mark practised'}</button><button class="pill ${s.difficult?'active':''}" data-action="mark" data-id="${attr(phrase.id)}" data-status="difficult" aria-pressed="${!!s.difficult}">${ico('flag')} Difficult</button></div>`;}
 function phraseWords(p){if(!current()?.phrases.length)return '<span class="transcript-unavailable">Transcript unavailable<span>Listen to the audio. Add or replace a transcript in Lesson options to enable shadowing.</span></span>';if(!pref().showText)return '<span class="muted">Phrase hidden. Listen carefully.</span>';if(!p)return 'No phrase selected';const words=p.text.split(/(\s+)/);let index=-1;const activeWords=new Set(activeWordIndices(p,player.time));return '<span class="phrase-inner">'+words.map(w=>{if(!w.trim())return ' ';index++;return `<button class="word ${activeWords.has(index)?'current-word':''}" data-action="word" data-focus-key="${attr(JSON.stringify([current().id,p.id,index]))}" data-word="${attr(w)}" title="View British IPA">${esc(w)}</button>`;}).join('')+'</span>';}
 const videoAwaitingChoice=lesson=>!!lesson&&!usesUploadedAudio(lesson)&&!videoAllowed(lesson);
-function canTransferFromPlayer(p=player.current()){
- return !!p&&!player.playing&&!mirror.active&&!mirror.panelOpen&&
-  (videoAwaitingChoice(current())||(player.state==='loading'&&!player.wantsPlayback)||
-   ['ready','paused','speaking-pause','stalled','blocked','error'].includes(player.state));
-}
 function playerView(){
  const l=current(),p=player.current();if(!l)return empty('Choose a lesson','Open a lesson from your library.');
  const audio=usesUploadedAudio(l),transport=transportState(player),failed=player.state==='error',disabled=!player.ready||failed;
  const mirrorAvailable=audio&&!!p&&p.end>p.start;
  const needsVideo=videoAwaitingChoice(l);
- const provider=!activePrompt()&&videoAllowed(l);
+ const provider=videoAllowed(l);
  const cover=artworkURL(l,{allowYouTube:provider,large:true}),sourceArt=artworkURL(l,{allowYouTube:provider});
- const feedback=playbackFeedback(needsVideo?'idle':player.state,audio),transfer=canTransferFromPlayer(p);
+ const feedback=playbackFeedback(needsVideo?'idle':player.state,audio);
  const last=player.eligible().at(-1)?.id===p?.id,duration=p?p.end-p.start:player.duration||l.duration||0;
  const recording=mirror.phase==='recording';
  const recordLabel=recording?'Stop and listen back':mirror.busy?'Cancel recording cycle':'Listen then record';
@@ -266,9 +249,8 @@ function playerView(){
   <button id="mirror-main-play" class="practice-primary ${feedback.busy?'is-waiting':''}" aria-busy="${feedback.busy}" data-action="${transport.action}" aria-label="${transport.label}" title="${transport.label}" ${disabled||mirror.busy?'disabled':''}>${ico(transport.icon)}<span>${transport.label}</span></button>
   <button class="practice-next ${player.phraseDone?'earned':''}" data-action="next" aria-label="${last?'Finish practice':'Next phrase'}" title="${last?'Finish practice':'Practised, next phrase'}" ${disabled||!p?'disabled':''}>${ico(last?'check':'next')}<span>${last?'Finish':'Next'}</span></button>
  </div>
- ${p?`<div class="practice-footnote">
-  ${mirrorAvailable?`<button id="mirror-main-record" class="mirror-main-record ${recording?'is-recording':''}" data-action="mirror-record" aria-label="${recordLabel}" ${disabled||mirror.phase==='finishing'?'disabled':''}>${recordSymbol}<span>${recording?'Stop':mirror.busy?'Cancel':'Record'}</span></button>`:''}
-  ${transfer?`<button id="player-transfer-prompt" class="player-transfer-prompt text-link" type="button" data-action="practice-transfer-prompt" data-from="player" aria-haspopup="dialog">Try a new conversation</button>`:''}
+ ${mirrorAvailable?`<div class="practice-footnote">
+  <button id="mirror-main-record" class="mirror-main-record ${recording?'is-recording':''}" data-action="mirror-record" aria-label="${recordLabel}" ${disabled||mirror.phase==='finishing'?'disabled':''}>${recordSymbol}<span>${recording?'Stop':mirror.busy?'Cancel':'Record'}</span></button>
  </div>`:''}
  </footer></div>
 
@@ -342,7 +324,7 @@ function optionsSheet(){
  const nav=`<nav class="option-tabs" role="tablist" aria-label="Player options">${[['playback','Playback'],['practice','Practice'],['lesson','Lesson']].map(([v,label])=>`<button role="tab" aria-selected="${tab===v}" tabindex="${tab===v?0:-1}" data-action="options-tab" data-tab="${v}" class="${tab===v?'active':''}">${label}</button>`).join('')}</nav>`;
  let body='';
  if(tab==='practice'&&!p)body='<p>Transcript unavailable. Listening and recording are available; add a valid transcript to use phrase practice.</p>';else if(tab==='lesson')body=lessonForm(l);
- else if(tab==='practice')body=`<div class="option-group">${statusControls(p)}</div>${practiceForm(l)}<div class="option-links"><button class="menu-link" data-action="edit-phrase" data-id="${attr(p.id)}">Edit current phrase ${ico('edit')}</button><button id="practice-transfer-prompt" class="menu-link" type="button" aria-haspopup="dialog" data-action="practice-transfer-prompt" ${recorder.requesting||recorder.recorder?.state==='recording'?'disabled':''}>Try a new conversation ${ico('chevron','shelf-next')}</button><button class="menu-link" data-action="session-finish">Finish session ${ico('check')}</button></div>`;
+ else if(tab==='practice')body=`<div class="option-group">${statusControls(p)}</div>${practiceForm(l)}<div class="option-links"><button class="menu-link" data-action="edit-phrase" data-id="${attr(p.id)}">Edit current phrase ${ico('edit')}</button><button class="menu-link" data-action="session-finish">Finish session ${ico('check')}</button></div>`;
  else body=`<div class="option-group"><div class="menu-setting"><label for="player-mode">Mode</label><select id="player-mode" data-pref="mode">${selectOption([['manual','Manual'],['automatic','Automatic'],['continuous','Continuous']],player.mode)}</select></div>
  <div class="menu-setting"><label for="speed">Speed</label><div class="inline-controls"><select id="speed" aria-label="Playback speed">${selectOption(rates.map(x=>[x,x+'×']),player.requestedSpeed??player.speed)}</select><button class="text-link" data-action="reset-speed">Reset</button></div></div>
  <div class="menu-setting"><label for="player-lead">Lead-in</label><select id="player-lead" data-pref="leadIn">${selectOption([[0,'None'],[.25,'0.25 s'],[.5,'0.5 s'],[1,'1 s'],[2,'2 s']],player.leadIn)}</select></div></div>
@@ -422,8 +404,6 @@ function modal(){const m=ui.modal;let content='',title='',large=false;
    </div></details>`:'';
    content=`<div class="summary-stat"><div><strong>${s.coveredIds.length}</strong><small>Phrases heard</small></div><div><strong>${listeningDuration(s.activeSeconds)}</strong><small>Active listening</small></div><div><strong>${s.practised}</strong><small>Marked practised</small></div><div><strong>${s.difficult}</strong><small>Marked difficult</small></div></div>${note}
     <div class="modal-footer"><button class="btn ghost" data-action="summary-library">Library</button><button class="btn ghost" data-action="summary-restart">Restart</button><button class="btn ghost" data-action="summary-difficult">Review difficult</button><button class="btn primary" data-action="summary-journal">View Journal</button></div>`;
- } else if(m.type==='drills'){
-   title='Choose a focus';content=renderDrills({icon:ico,escape:esc,activities:Object.values(practiceDrills)});
  } else if(m.type==='playback-details'){
    title='Playback help';content=`<p class="muted">${esc(player.error||'Playback is not ready yet.')}</p><div class="modal-footer"><button class="btn ghost" data-action="modal-close">Close</button><button class="btn primary" data-action="retry-player">Retry playback</button></div>`;
  } else if(m.type==='device-drafts'){
@@ -444,13 +424,7 @@ function ensureAmbient(lesson){
  const data=store.data;
  prepareAmbient(lesson,palette=>{
   if(store.data===data&&data.lessons.includes(lesson))store.mutate(()=>{lesson.ambientPalette=palette;});
- },{allowYouTube:videoAllowed(lesson)&&!activePrompt()});
-}
-let shownPrompt=null;
-function isolateSpeakingPrompt(prompt){
- dock.inert=!!prompt;
- toaster.hidden=!!prompt;
- if(prompt)for(const child of root.children)child.inert=child!==cueRegion.element;
+ },{allowYouTube:videoAllowed(lesson)});
 }
 function captureModalFields(){
  const fields=root.querySelectorAll('.modal input[id]:not([type=file]):not([data-pref]):not(#audio-offset):not(#player-loop),.modal textarea[id],.modal select[id]:not([data-pref]):not(#speed):not(#lesson-media-source)');
@@ -458,22 +432,10 @@ function captureModalFields(){
 }
 function render({recenterQueue=false}={}){
  focus.cancelDeferred();
- const prompt=activePrompt();
- const draft=ui.practicePromptDraft;
- const practiceFields=draft&&draft.lessonId===current()?.id&&ui.modal?.type==='player-settings'&&ui.optionsTab==='practice'?draft.fields:null;
- if(prompt!==shownPrompt){
-  shownPrompt=prompt;
-  ui.practicePromptDraft=ui.modal?.type==='transfer-prompt'&&ui.modal.from!=='player'?{lessonId:current()?.id,fields:captureModalFields()}:null;
-  if(prompt){
-   ui.queueWasPlaying=false;
-   player.pauseForPrompt({save:prompt.kind!=='transfer-prompt'});
-  }else player.releasePrompt();
- }
  if(!store.owner){
   applyTheme();dock.className='youtube-dock dock-hidden';
   const checking=store.mode==='checking',focused=focus.capture();
-  cueRegion.render(`<main class="home-screen rehearsal-locked"><header class="home-appbar"><h1>Echo Studio</h1></header><section class="empty"><h2>${checking?'Connecting':'Library unavailable'}</h2><p role="status">${checking?'Checking your account…':'Connect and sign in to load your private library.'}</p><div class="home-start"><button id="home-speaking-prompt" class="btn primary" type="button" data-action="home-speaking-prompt" aria-haspopup="dialog">Talk now</button>${checking?'':'<button class="btn ghost" data-action="retry-sync">Retry</button>'}</div></section></main>`,prompt);
-  isolateSpeakingPrompt(prompt);
+  root.innerHTML=`<main class="home-screen rehearsal-locked"><header class="home-appbar"><h1>Echo Studio</h1></header><section class="empty"><h2>${checking?'Connecting':'Library unavailable'}</h2><p role="status">${checking?'Checking your account…':'Connect and sign in to load your private library.'}</p>${checking?'':'<button class="btn ghost" data-action="retry-sync">Retry</button>'}</section></main>`;
   navigation.commit(captureRoute());
   focus.restore(focused);return;
  }
@@ -485,7 +447,7 @@ function render({recenterQueue=false}={}){
  if(oldQueue&&!recenterQueue&&ui.queuePage?.lessonId!==current()?.id&&queuePosition!==Number(oldQueue.dataset.renderedScroll))holdQueuePage(oldQueue);
  const focused=focus.capture();
  const horizontalPositions=new Map([...root.querySelectorAll('[data-scroll-key]')].map(el=>[el.dataset.scrollKey,el.scrollLeft]));
- const formValues=practiceFields??(ui.modal&&!['add','replace'].includes(ui.modal.type)?captureModalFields():[]);
+ const formValues=ui.modal&&!['add','replace'].includes(ui.modal.type)?captureModalFields():[];
  const fullPlayer=ui.view==='player';
  applyTheme();
  for(const view of ['home','collections','settings','search','journal','player'])document.body.classList.toggle(`view-${view}`,ui.view===view);
@@ -495,12 +457,11 @@ function render({recenterQueue=false}={}){
  document.body.classList.toggle('has-compact-audio',!!current()&&ui.started&&!ui.compactDismissed&&!fullPlayer);
  applyAmbient(current());
  if(fullPlayer&&current())ensureAmbient(current());
- cueRegion.render(shell(viewContent()),prompt);
+ root.innerHTML=shell(viewContent());
  dock.className=`youtube-dock ${videoAllowed(current())&&(fullPlayer||ui.started&&!ui.compactDismissed)?(fullPlayer?'':'dock-compact'):'dock-hidden'}`;
  const lyricsSlot=document.getElementById('lyrics-viewport');
  if(lyricsSlot)lyrics.mount(lyricsSlot,{lessonId:current().id,phrases:player.eligible(),currentId:player.current()?.id,activeHTML:phraseWords(player.current())});
  updateTimeline();layoutDock();schedulePlayerLayout();
- isolateSpeakingPrompt(prompt);
  const queueList=ui.queue&&root.querySelector('#queue-list');
  if(queueList){
   if(oldQueue)queueList.closest('.queue-panel').dataset.retained='';
@@ -748,17 +709,15 @@ store.onChange=()=>{
  if(renderImmediately){
    const hadOwner=visibleOwner!==null;
    visibleOwner=store.owner;
-   // A prompt opened before identity verification carries no private state.
-   const keepPublicPrompt=!hadOwner&&ui.modal?.type==='home-prompt';
-   if(!keepPublicPrompt&&(hadOwner||navigation.ready))resetPrivateView();
+   if(hadOwner||navigation.ready)resetPrivateView();
    mirror.setOwner(visibleOwner);
-   if(navigation.ready&&!keepPublicPrompt)navigation.start(captureRoute(),false);
+   if(navigation.ready)navigation.start(captureRoute(),false);
  }
  if(!store.owner){render();return;}
  if(current()){
    const saved=store.data.lessons.find(l=>l.id===current().id);
    if(saved&&saved!==current()){renderImmediately=true;player.load(saved,pref());initialiseSource(saved);}
-   else if(!saved){renderImmediately=true;clearActivePlayer();mirror.exit();recorder.stop();if(ui.view==='player'){ui.view='library';if(ui.modal?.type==='transfer-prompt')ui.modal=null;}}
+   else if(!saved){renderImmediately=true;clearActivePlayer();mirror.exit();recorder.stop();if(ui.view==='player')ui.view='library';}
  }
  prepareStartup();cleanupAudio();
  if(ui.view){if(renderImmediately)render();else focus.afterEditing(render);}
@@ -780,12 +739,7 @@ async function restoreBackup(file){
  }
 }
 function getVal(id){return document.getElementById(id)?.value;}
-function openSpeakingPrompt(type,from){
- if(!navigation.ready)navigation.start(captureRoute(),false);
- ui.modal={type,from};render();
-}
 function closeModal(){
- if(activePrompt()){navigation.back();return;}
  recorder.stop();ui.modal=null;ui.word=null;render();
 }
 function downloadBackup(text,filename){
@@ -816,24 +770,8 @@ async function changeDeviceDraft(choice,id){
 }
 function collectImportInputs(){const a=ui.import;if(ui.modal?.type==='add'){a.url=getVal('import-url')??a.url;a.title=getVal('import-title')??a.title;a.speaker=getVal('import-speaker')??a.speaker;}a.text=getVal('transcript-text')??a.text;a.grouping=getVal('import-grouping')??a.grouping;a.offset=Number(getVal('import-offset')??a.offset);}
 function action(name,data,e){
- const dismissDialog=name==='modal-close'||name==='shade';
- if(activePrompt()&&!dismissDialog)return;
- if(!store.owner&&!dismissDialog&&name!=='retry-sync'&&name!=='home-speaking-prompt')return;
+ if(!store.owner&&name!=='retry-sync')return;
  const l=current();if(mirror.active&&['toggle','next','prev','replay','reset-phrase','select-phrase','lyric-select','queue-replay','queue','player-settings','settings-shortcut','show-ipa','word','seek-tools','mode','record-practice','remove-audio'].includes(name))mirror.exit();switch(name){
- case 'home-speaking-prompt':if(ui.view==='home'&&!ui.modal&&!libraryUI.dialog&&!collectionsUI.dialog&&!mirror.panelOpen)openSpeakingPrompt('home-prompt');break;
- case 'home-drills':if(ui.view==='home'&&!ui.modal){ui.modal={type:'drills'};render();}break;
- case 'start-drill':if(ui.modal?.type==='drills'&&Object.hasOwn(practiceDrills,data.id))openSpeakingPrompt('drill-prompt',data.id);break;
- case 'home-browse':ui.homeBrowseOpen=!ui.homeBrowseOpen;render();break;
- case 'practice-transfer-prompt': {
-   if(ui.view!=='player'||recorder.requesting||recorder.recorder?.state==='recording')break;
-   if(data.from==='player'&&!ui.modal&&!(ui.queue&&mobileLayout())&&canTransferFromPlayer()){
-     openSpeakingPrompt('transfer-prompt','player');
-   }else if(ui.modal?.type==='player-settings'&&ui.optionsTab==='practice'&&player.current()){
-     openSpeakingPrompt('transfer-prompt','options');
-   }
-   break;
- }
- case 'home-category':ui.homeCategory=data.category||'';render();break;
  case 'home-categories':libraryUI.action('taxonomy');break;
  case 'home-course-options':libraryUI.action('menu',{kind:'c',id:data.id});break;
  case 'home-course':mirror.exit();ui.view='library';ui.collectionId=null;libraryUI.selecting=false;libraryUI.selected.clear();libraryUI.action('open',{kind:'c',id:data.id});window.scrollTo(0,0);break;

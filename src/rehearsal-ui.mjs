@@ -18,62 +18,31 @@ function resumeReference(lesson, icon, escape, lessonArtwork) {
   const position = lesson.progress?.position;
   const detail = [speaker, position > 0 ? `${fmtTime(position)} in the recording` : 'Ready to start']
     .filter(Boolean).join(' · ');
-  return `<button class="rehearsal-row home-resume" type="button" data-action="open-lesson" data-id="${escape(lesson.id)}" aria-label="Resume lesson">
-    <span class="rehearsal-row-art">${lessonArtwork(lesson)}</span>
-    <span class="rehearsal-row-copy"><strong>${escape(lesson.title)}</strong><small>${escape(detail)}</small></span>
-    <span class="rehearsal-row-arrow rehearsal-resume-play" aria-hidden="true">${icon('play')}</span>
+  return `<button id="home-resume" class="home-resume" type="button" data-action="open-lesson" data-id="${escape(lesson.id)}" aria-label="Resume lesson" aria-describedby="home-resume-title home-resume-detail">
+    ${lessonArtwork(lesson)}
+    <span class="home-resume-copy"><strong id="home-resume-title">${escape(lesson.title)}</strong><small id="home-resume-detail">${escape(detail)}</small></span>
+    <span class="home-resume-play" aria-hidden="true">${icon('play')}</span>
   </button>`;
 }
 
-export function renderRehearse({ data, icon, escape, lessonArtwork, browseHTML = '', browseOpen = false }) {
+export function renderHome({ data, icon, escape, lessonArtwork, shelvesHTML = '' }) {
   const resume = referenceFor(data);
-  const canBrowse = data.lessons.length || data.courses?.length || data.collections?.length;
-  const shelves = browseOpen && typeof browseHTML === 'function' ? browseHTML() : browseOpen ? browseHTML : '';
   return `<main class="home-screen rehearsal-home" id="rehearsal-main">
-    <section class="rehearsal-hero" aria-labelledby="rehearsal-heading">
-      <div class="rehearsal-hero-copy">
-        <h1 id="rehearsal-heading">Rehearse the change.</h1>
-        <p>Your colleague expects the figures on Tuesday. The plan has changed. Give them a short update.</p>
-        <button id="home-speaking-prompt" class="btn primary home-prompt" type="button" aria-haspopup="dialog" data-action="home-speaking-prompt">${icon('wave')} Talk now</button>
-      </div>
-      <div class="rehearsal-hero-art" aria-hidden="true"></div>
-    </section>
-    <div class="rehearsal-starts">
-      <section${resume ? '' : ' class="first-lesson"'} aria-labelledby="rehearsal-reference-heading">
-        <h2 class="rehearsal-group-title" id="rehearsal-reference-heading">${resume ? 'Resume a reference' : 'Add your first lesson'}</h2>
-        ${resume ? resumeReference(resume, icon, escape, lessonArtwork) : `<button class="rehearsal-row" type="button" data-action="open-add" aria-label="Add lessons" aria-describedby="rehearsal-add-imports">
-          <span class="rehearsal-row-art" aria-hidden="true">${icon('plus')}</span>
-          <span class="rehearsal-row-copy"><strong>Add lessons</strong><small id="rehearsal-add-imports">Import a ZIP or prepare a YouTube reference.</small></span>
-          <span class="rehearsal-row-arrow" aria-hidden="true">${icon('chevron')}</span>
-        </button>`}
-      </section>
-      <section aria-labelledby="rehearsal-focus-heading">
-        <h2 class="rehearsal-group-title" id="rehearsal-focus-heading">Choose a focus</h2>
-        <button class="rehearsal-row" type="button" data-action="home-drills" id="rehearsal-pick-drill" aria-haspopup="dialog" aria-label="Pick a speaking drill" aria-describedby="rehearsal-drill-description">
-          <span class="rehearsal-row-art" aria-hidden="true">${icon('spark')}</span>
-          <span class="rehearsal-row-copy"><strong>Pick a speaking drill</strong><small id="rehearsal-drill-description">Try a short exercise for a specific part of your delivery.</small></span>
-          <span class="rehearsal-row-arrow" aria-hidden="true">${icon('chevron')}</span>
-        </button>
-      </section>
-    </div>
-    <section class="rehearsal-browse" aria-label="Browse references">
-      <div class="rehearsal-browse-actions">
-        ${canBrowse ? `<button class="text-link rehearsal-browse-toggle" id="rehearsal-browse-toggle" type="button" data-action="home-browse" aria-expanded="${browseOpen}" aria-controls="home-browse-shelves">${browseOpen ? 'Hide reference shelves' : 'Browse reference shelves'}</button>` : ''}
-        <button id="home-manage-categories" class="text-link home-manage-categories" type="button" data-action="home-categories">Manage categories</button>
-      </div>
-      ${canBrowse ? `<div id="home-browse-shelves"${browseOpen ? '' : ' hidden'}>${shelves}</div>` : ''}
-    </section>
+    <header class="home-appbar">
+      <h1>Home</h1>
+      <button class="btn ghost" type="button" data-action="view" data-view="search">${icon('search')} Search</button>
+    </header>
+    ${resume ? `<section class="home-continue" aria-labelledby="home-continue-heading">
+      <h2 id="home-continue-heading">${resume.id === data.lastLessonId ? 'Continue practising' : 'Most recent lesson'}</h2>
+      ${resumeReference(resume, icon, escape, lessonArtwork)}
+    </section>` : `<section class="first-lesson" aria-labelledby="home-empty-heading">
+      <h2 id="home-empty-heading">Add your first lesson</h2>
+      <p>Import a ZIP or add a YouTube link and transcript.</p>
+      <button id="home-add-lesson" class="btn primary" type="button" data-action="open-add">${icon('plus')} Add lesson</button>
+    </section>`}
+    ${shelvesHTML}
+    ${shelvesHTML ? '<button id="home-manage-categories" class="text-link home-manage-categories" type="button" data-action="home-categories">Manage categories</button>' : ''}
   </main>`;
-}
-
-export function renderDrills({ icon, escape, activities }) {
-  return `<ul class="rehearsal-drills">${activities.map(activity => `<li>
-    <button class="rehearsal-row" id="rehearsal-drill-${escape(activity.id)}" type="button" data-action="start-drill" data-id="${escape(activity.id)}" aria-labelledby="rehearsal-drill-title-${escape(activity.id)}" aria-describedby="rehearsal-drill-detail-${escape(activity.id)}">
-      <span class="rehearsal-row-art" aria-hidden="true">${icon(activity.icon || 'spark')}</span>
-      <span class="rehearsal-row-copy"><strong id="rehearsal-drill-title-${escape(activity.id)}">${escape(activity.title)}</strong><small id="rehearsal-drill-detail-${escape(activity.id)}">${escape(activity.description)}</small></span>
-      <span class="rehearsal-row-arrow" aria-hidden="true">${icon('chevron')}</span>
-    </button>
-  </li>`).join('')}</ul>`;
 }
 
 function journalTimestamp(session, escape) {
@@ -118,7 +87,7 @@ export function renderJournal({ data, icon, escape }) {
     <header class="rehearsal-journal-header"><h1>Journal</h1><p>Pick up where a rehearsal left off.</p></header>
     ${entries ? `<ol class="journal-list" aria-label="Completed reference sessions">${entries}</ol>${data.sessions.length > visibleSessions.length ? '<p class="muted">Showing 100 sessions.</p>' : ''}` : `<section class="journal-empty" aria-labelledby="journal-empty-heading">
       <h2 id="journal-empty-heading">Your first session belongs here</h2><p>Finish a reference session to keep a record of what you practised.</p>
-      <button class="btn primary" type="button" data-action="view" data-view="home">${icon('home')} Go to Rehearse</button>
+      <button class="btn primary" type="button" data-action="view" data-view="home">${icon('home')} Go to Home</button>
     </section>`}
   </main>`;
 }

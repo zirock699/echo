@@ -48,7 +48,7 @@ def check_preview_row(form, caption, bounds):
 def verify_reference_preparation(fixture):
     page, errors = fixture.open_page(320, 568)
     home = page.get_by_role('main')
-    home.get_by_role('button', name='Add lessons', exact=True).click()
+    home.get_by_role('button', name='Add lesson', exact=True).click()
     add = page.get_by_role('dialog', name='Add lessons', exact=True)
     add.get_by_role('button', name=re.compile(r'^YouTube lesson')).click()
     form = page.get_by_role('dialog', name='Create a lesson', exact=True)

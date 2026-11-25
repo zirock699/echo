@@ -86,7 +86,6 @@ test('built Worker serves app assets and routes state and audio requests', async
     .filter(entry => entry.isFile() && /^[\w-][\w.-]*\.(?:mjs|css)$/.test(entry.name))
     .map(entry => '/src/' + entry.name);
   const rehearsalMedia = new Map([
-    ['/assets/rehearsal-home.webp', 'image/webp'],
     ['/assets/rehearsal-bricolage.woff2', 'font/woff2'],
     ['/assets/rehearsal-instrument.woff2', 'font/woff2'],
   ]);

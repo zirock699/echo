@@ -5,7 +5,7 @@ import path from 'node:path';
 const manifestPath='/manifest.webmanifest';
 const workerPath='/sw.js';
 const shellFiles=['/index.html',manifestPath,'/assets/icon.svg',
- '/assets/rehearsal-home.webp','/assets/rehearsal-bricolage.woff2','/assets/rehearsal-instrument.woff2'];
+ '/assets/rehearsal-bricolage.woff2','/assets/rehearsal-instrument.woff2'];
 const supplementaryFiles=['/assets/colorthief-LICENSE.txt','/assets/rehearsal-bricolage-OFL.txt',
  '/assets/rehearsal-instrument-OFL.txt','/tests/viewport.html','/tests/notices.html'];
 const fixedFiles=new Set([...shellFiles,workerPath,...supplementaryFiles]);

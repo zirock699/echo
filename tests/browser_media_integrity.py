@@ -46,7 +46,6 @@ def run():
         assert saved['lessons'][0]['progress']['coverage'] == [[.1, .2]]
         assert page.request.get(fixture.origin + asset['url']).status == 200
         page.locator('.mobile-nav [data-view=home]').click()
-        page.get_by_role('button', name='Browse reference shelves', exact=True).click()
         page.locator('[data-action=home-course]').first.click()
         page.get_by_role('button', name='Continue', exact=True).click()
         expect(page.locator('.player-title')).to_contain_text('Second fixture')

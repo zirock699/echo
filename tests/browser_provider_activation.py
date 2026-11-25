@@ -115,9 +115,8 @@ def run():
             return page.get_by_role('button', name=name, exact=True)
 
         expect(button('Resume lesson')).to_contain_text(VIDEO)
-        button('Talk now').click()
-        expect(page.get_by_role('dialog', name='Speaking prompt')).to_be_visible()
-        button('Back to Rehearse').click()
+        expect(nav.get_by_role('button', name='Home', exact=True)).to_have_attribute('aria-current', 'page')
+        assert not provider, provider
 
         nav.locator('[data-view=library]').click()
         page.locator('.library-open').filter(has_text='Fixture course').click()
@@ -150,11 +149,9 @@ def run():
             page.locator('.collection-member .collection-open').filter(has_text=VIDEO).click()
         expect(player).to_be_visible()
         expect(button('Play')).to_be_disabled()
-        cue = button('Try a new conversation')
-        cue.click()
-        expect(page.get_by_role('dialog', name='Take a phrase into a new conversation')).to_be_visible()
-        button('Back to player').click()
-        expect(cue).to_be_focused()
+        expect(player.locator('#active-phrase')).to_have_text('Try the first reference.')
+        expect(page.locator('iframe[title="YouTube lesson video"]')).to_have_count(0)
+        assert waiting, 'The provider script must be pending before checking the transcript'
         waiting.pop().fulfill(content_type='text/javascript', body=IFRAME_API)
         page.unroute(api_url, hold_api)
         expect(button('Play')).to_be_enabled()
@@ -188,11 +185,11 @@ def run():
         library['preferences']['startupLesson'] = 'native'
         fixture.save_library(library)
         page, provider, errors = open_page(fixture)
-        expect(button('Talk now')).to_be_visible()
+        expect(page.get_by_role('main').get_by_role('heading', name='Home', exact=True)).to_be_visible()
         page.wait_for_function('fixtureAudio.some(audio => audio.paused && audio.readyState >= 1)')
         assert not provider, provider
         assert not errors, errors
-        print('PASS provider-free Home, cue, Library, Search, Collections, native playback and warm preparation.')
+        print('PASS provider-free Home, Library, Search, Collections, native playback and warm preparation.')
         print('PASS deliberate video loads one visible controlled iframe, cues paused, plays on request and reloads cold.')
 
 

@@ -106,4 +106,8 @@ The owner approved all six initiatives for work on 25 November 2026. T1 and T4 p
 
 ## Rehearsal Desk follow-through · 25 November 2026
 
-After the rendered comparison, the owner chose B · Rehearsal Desk and requested steadier player controls. The implemented navigation, aligned transport, Listen back and Journal passed local QA and independent design review. The acceptance checks for capture, exact Journal return and drill focus are part of the maintained runner. The physical-device, hosted, live-source and participant evidence above remains open. [Design decision and actual screens](../design-review-2026-11-25/review-notes.md#implemented-rehearsal-desk) · [Verification outcomes](release-evidence.md#rehearsal-desk-closeout--25-november-2026)
+After the rendered comparison, the owner chose B · Rehearsal Desk and requested steadier player controls. The implemented navigation, aligned transport, Listen back and Journal passed local QA and independent design review. At that revision the acceptance runner covered capture, exact Journal return and drill focus. The physical-device, hosted, live-source and participant evidence above remains open. [Design decision and actual screens](../design-review-2026-11-25/review-notes.md#implemented-rehearsal-desk) · [Verification outcomes](release-evidence.md#rehearsal-desk-closeout--25-november-2026)
+
+## Home and practice correction · 25 November 2026
+
+The owner found the standalone text prompts gave no follow-through and the disclosure hid their library. Home now shows the saved lesson and populated shelves directly. The static Home prompt, drill chooser and phrase-to-conversation prompt were retired. The off-app pilot in T5 remains an open product question. [Current design](../../DESIGN.md#home-and-practice-correction--25-november-2026) · [Verified outcomes](release-evidence.md#home-and-practice-correction--25-november-2026)
