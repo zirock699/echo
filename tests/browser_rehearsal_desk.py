@@ -1,4 +1,4 @@
-"""Keep the active transcript and player controls aligned while media and the queue change state."""
+"""Verify Rehearsal Desk alignment, drills, and the Journal return journey."""
 
 import io
 import wave
@@ -8,7 +8,7 @@ from playwright.sync_api import expect
 from browser_fixture import browser_fixture
 
 
-def seed(fixture, audio):
+def seed(fixture, audio, *, sessions=()):
     phrases = [
         {'id': 'deadline', 'start': 1, 'end': 11,
          'text': 'We can move the deadline to Thursday. In the meantime, could you check the figures?'},
@@ -22,7 +22,7 @@ def seed(fixture, audio):
             'ambientPalette': {'version': 1, 'videoId': 'deskTest001', 'source': 'fallback', 'colours': []},
             'progress': {'phraseId': 'deadline', 'position': 2},
         }],
-        'sessions': [], 'collections': [], 'courses': [], 'lastLessonId': 'desk-reference',
+        'sessions': list(sessions), 'collections': [], 'courses': [], 'lastLessonId': 'desk-reference',
         'preferences': {'theme': 'dark', 'startupLesson': 'none', 'mode': 'manual',
                         'queueOpen': False, 'originalPlaybackVersion': 1},
     })
@@ -46,8 +46,8 @@ def assert_aligned(before, after, transition):
         assert all(abs(change) <= 1 for change in delta), (transition, selector, delta)
 
 
-def open_player(fixture, audio, width, height, *, mobile=True):
-    seed(fixture, audio)
+def open_player(fixture, audio, width, height, *, mobile=True, sessions=()):
+    seed(fixture, audio, sessions=sessions)
     page, errors = fixture.open_page(width, height, mobile=mobile)
     page.emulate_media(reduced_motion='reduce')
     page.get_by_role('button', name='Resume lesson', exact=True).press('Enter')
@@ -96,6 +96,85 @@ def check_docked_queue(fixture, audio):
     page.context.close()
 
 
+def check_journal(fixture, audio):
+    older_session = {'id': 'older-desk-session', 'lessonId': 'desk-reference', 'mode': 'manual'}
+    page, errors = open_player(fixture, audio, 390, 844, sessions=(older_session,))
+    player = page.get_by_role('main', name='Practice player')
+    player.get_by_role('button', name='Play', exact=True).press('Enter')
+    page.wait_for_function('media.some(audio => !audio.paused && audio.currentTime > 2.35)')
+    player.get_by_role('button', name='Player settings', exact=True).press('Enter')
+    options = page.get_by_role('dialog', name='Options', exact=True)
+    options.get_by_role('tab', name='Practice', exact=True).press('Enter')
+    options.get_by_role('button', name='Finish session', exact=True).press('Enter')
+
+    summary = page.get_by_role('dialog', name='Session complete', exact=True)
+    expect(summary).to_be_visible()
+    draft = fixture.wait_for_library(page, lambda data: len(data['sessions']) == 2, 'completed session before adding a note')
+    completed = draft['sessions'][0]
+    assert completed['lessonId'] == 'desk-reference' and completed['coveredIds'] == ['deadline']
+    assert completed['activeSeconds'] > 0
+    page.wait_for_function('media.every(audio => audio.paused && !audio.seeking)')
+    position = page.evaluate("media.find(audio => audio.currentSrc.includes('/api/audio/')).currentTime")
+
+    note = 'Keep <Thursday> clear before asking.'
+    summary.get_by_text('Note for next time', exact=True).click()
+    summary.get_by_role('textbox', name='What would you like to try again?', exact=True).fill(note)
+    # Let the ordinary one-second Store debounce elapse before inspecting the account copy.
+    page.wait_for_timeout(1200)
+    assert 'journalNote' not in fixture.state()['data']['sessions'][0], 'Typing must leave the note a private draft'
+    summary.get_by_role('button', name='Save note', exact=True).press('Enter')
+    saved = fixture.wait_for_library(
+        page, lambda data: data['sessions'][0].get('journalNote') == note, 'explicit Journal note save',
+    )
+    assert saved['sessions'][0]['id'] == completed['id']
+    assert saved['sessions'][0]['coveredIds'] == completed['coveredIds']
+    assert abs(saved['lessons'][0]['progress']['position'] - position) < .08
+
+    summary.get_by_role('button', name='View Journal', exact=True).click()
+    journal = page.locator('.rehearsal-journal')
+    expect(journal.get_by_role('heading', name='Journal', exact=True)).to_be_visible()
+    expect(journal.get_by_text(note, exact=True)).to_be_visible()
+    expect(journal.locator('thursday')).to_have_count(0)
+    expect(journal.get_by_role('button', name='Open saved reference', exact=True)).to_have_count(2)
+
+    # Open the older of two rows for this lesson so focusing the first match fails the check.
+    opener = journal.locator('#journal-resume-older-desk-session')
+    opener.press('Enter')
+    expect(player.locator('#active-phrase')).to_have_attribute('data-phrase', 'deadline')
+    expect(player.get_by_role('button', name='Play', exact=True)).to_be_enabled()
+    page.wait_for_function('''position => media.some(audio => audio.currentSrc.includes('/api/audio/') &&
+                            audio.paused && !audio.seeking && Math.abs(audio.currentTime - position) < .08)''', arg=position)
+    page.go_back()
+    expect(journal).to_be_visible()
+    expect(opener).to_be_focused()
+    page.reload(wait_until='domcontentloaded')
+    expect(journal.get_by_text(note, exact=True)).to_be_visible()
+    assert not errors, errors
+    page.context.close()
+    print('PASS 390×844 Journal completion, explicit note save, exact paused resume, and Back to the initiating row.')
+
+
+def check_drill_return(fixture):
+    page, errors = fixture.open_page(390, 844)
+    opener = page.get_by_role('button', name='Pick a speaking drill', exact=True)
+    opener.press('Enter')
+    chooser = page.get_by_role('dialog', name='Choose a focus', exact=True)
+    drill = chooser.get_by_role('button', name='Make the key detail clear', exact=True)
+    drill.press('Enter')
+    cue = page.get_by_role('dialog', name='Make the key detail clear', exact=True)
+    expect(cue.get_by_role('heading')).to_be_focused()
+    expect(cue).to_contain_text('The room now opens at half past nine.')
+    page.go_back()
+    expect(cue).to_be_hidden()
+    expect(drill).to_be_focused()
+    page.keyboard.press('Escape')
+    expect(chooser).to_be_hidden()
+    expect(opener).to_be_focused()
+    assert not errors, errors
+    page.context.close()
+    print('PASS 390×844 drill cue and keyboard focus at both return points.')
+
+
 def run():
     with browser_fixture(__doc__, 'native generated WAV and measured transcript/control positions') as fixture:
         wav = io.BytesIO()
@@ -107,6 +186,8 @@ def run():
             check_transport(fixture, audio, width, height)
         check_docked_queue(fixture, audio)
         print('PASS paused Resume and stable transcript, Replay, Play, and Next through playback and docked queue changes.')
+        check_journal(fixture, audio)
+        check_drill_return(fixture)
 
 
 if __name__ == '__main__':

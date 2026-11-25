@@ -54,3 +54,16 @@ On phones use a single reading column, preserve thumb access and allow long phra
 Reuse Echo’s playback, media, transcript, recording and persistence modules. Preserve exact selected cues and paused resume, the managed native source and the deliberately loaded visible YouTube player at no smaller than 200 × 200. Maintain Manual, Automatic and Continuous, replay, phrase marks and editing, IPA, imports, mini-player continuity, owner verification and recovery. Keep actual capture permission and saving explicit. Progress belongs to recorded activity and intentional owner choices. Use the current app's responsive and browser regressions alongside the approved render comparison.
 
 [A control and provider placement](a/README.md#production-placement-if-selected) · [B interaction design](b/README.md)
+
+## Implemented Rehearsal Desk
+
+These captures show the running app with disposable local data and generated media. The Home comparison uses the same fictional reference at 0:42. The Listen back capture shows an explicitly selected take playing on its own row. The Journal uses two sessions for the same reference to make the return path observable.
+
+| Journey | Earlier app | Approved B prototype | Running app |
+| --- | --- | --- | --- |
+| Start a rehearsal or resume a saved reference | [Home](baseline/01-home-390x844-dark.webp) | [Rehearse](screens/b-home-390x844.webp) | [Rehearse · 390 × 844, light](implemented/rehearse-390x844-light.png) |
+| Read an active phrase and control playback | [Player](baseline/03-player-390x844-dark.webp) | [Player](screens/b-player-390x844.webp) | [Paused player · 390 × 844, dark](implemented/player-390x844-dark.png) · [Open queue · 1440 × 900, light](implemented/player-queue-1440x900-light.png) |
+| Replay the reference or a recorded attempt | [Comparison](baseline/04-comparison-390x844-dark.webp) | [Comparison](screens/b-comparison-390x844.webp) | [Listen back · 390 × 844, dark](implemented/listen-back-390x844-dark.png) |
+| Save an observation and return to practice | [History](baseline/07-history-390x844-dark.webp) | [Journal](screens/b-history-390x844.webp) | [Journal · 390 × 844, light](implemented/journal-390x844-light.png) |
+
+The running app keeps Replay, Play and Next on one row while secondary phrase actions sit separately. The open desktop queue leaves those controls reachable. Journal returns to the saved reference paused and browser Back returns focus to the same session row. [Release verification](../transformation/release-evidence.md#rehearsal-desk-closeout--25-november-2026)

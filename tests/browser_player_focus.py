@@ -57,8 +57,11 @@ def verify_playback_options(fixture, page):
     page.wait_for_function('(previous) => !previous.isConnected', arg=old_sheet)
     expect(speaking_pause).to_have_attribute('open', '')
     expect(pause_type).to_be_focused()
-    assert page.evaluate('document.querySelector(\'[data-focus-dialog="app:player-settings"]\').scrollTop') == scroll_top
-    assert options.evaluate('(sheet) => getComputedStyle(sheet).animationName') == 'none'
+    retained = page.evaluate('''() => {
+        const sheet = document.querySelector('[data-focus-dialog="app:player-settings"]');
+        return {scrollTop: sheet.scrollTop, animationName: getComputedStyle(sheet).animationName};
+    }''')
+    assert retained == {'scrollTop': scroll_top, 'animationName': 'none'}, retained
     assert page.evaluate('media.filter(audio => !audio.paused).length') == 1
 
     options.get_by_role('tab', name='Playback').press('ArrowRight')
@@ -137,8 +140,12 @@ def verify_queue_and_ipa(page):
     }''')
     assert all(replaced and abs(scroll - position) <= 1 for replaced, scroll in positions), positions
     page.evaluate('() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))')
-    assert abs(page.evaluate(read_scroll) - position) <= 1
-    assert queue.evaluate('(sheet) => getComputedStyle(sheet).animationName') == 'none'
+    retained = page.evaluate('''() => {
+        const list = document.getElementById('queue-list');
+        return {scrollTop: list.scrollTop, animationName: getComputedStyle(list.closest('.queue-panel')).animationName};
+    }''')
+    assert abs(retained['scrollTop'] - position) <= 1, retained
+    assert retained['animationName'] == 'none', retained
     row.locator('[data-action=select-phrase]').press('Enter')
     expect(queue).to_be_hidden()
     expect(opener).to_be_focused()

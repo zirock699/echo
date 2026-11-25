@@ -24,7 +24,7 @@ YouTube-only lessons do not expose their audio for analysis and retain their exi
 
 ## Validation
 
-Unit tests cover waveform silence preservation, normalisation, attempt rotation, edited-source detection, delayed-permission cancellation, unsupported microphones and entry-position restoration. Browser fixtures use generated native audio and simulated microphone input. Physical microphones, iOS codecs and real-device interruption behaviour need separate device testing.
+Unit tests cover waveform silence preservation, normalisation, attempt rotation, edited-source detection, delayed-permission cancellation, unsupported microphones and entry-position restoration. The maintained Chromium journey uses generated native audio and a simulated microphone input to verify paused Listen back, exclusive comparison playback and device-only saves after reload. Physical microphones, iOS codecs and real-device interruption behaviour need separate device testing. [Browser journey](../tests/browser_echo_mirror.py)
 
 ## Main transport after engine recovery
 
