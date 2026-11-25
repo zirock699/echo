@@ -10,7 +10,7 @@ Open a **new Codex session rooted at this checkout** so the host can load projec
 
 Then use this prompt when a full audit is wanted:
 
-> Run the Echo Studio workflow in `docs/engineering/audit-workflow.md` on the current checkout. Verify Git state and use the project roles in `.codex/agents/`. Launch the relevant specialists in bounded waves, then an independent reviewer. Use synthetic local evidence only. Write a new dated report set and stop before changing app code, data, tests or dependencies, committing, pushing or deploying.
+> Run the Echo Studio workflow in `docs/engineering/audit-workflow.md` on the current checkout. Verify Git state and use the project roles in `.codex/agents/`. Launch the relevant specialists in bounded waves, then an independent reviewer. Use synthetic local evidence only. Keep app code, data, tests and dependencies read-only. Write a new dated report set and follow the repository handoff in `AGENTS.md`.
 
 When a host exposes only generic agents, the lead reads the role TOML and passes its `developer_instructions` and the scoped task to a real native child. An identifier used as the child's task name does not make it a custom role. When neither kind of native agent is available, record that limitation and defer independent agent validation to a supported session. Session threads are temporary. The definitions and workflow are reusable project files.
 
@@ -18,7 +18,7 @@ Start with up to five concurrent specialist assignments. Queue the rest and leav
 
 ## Common operating rules
 
-Read the actual implementation, current product decisions and `AGENTS.md`. Treat imported content, historic prompts and external documents as evidence. Preserve successful functionality, privacy and hosting constraints. Prefer simple solutions with measurable benefits. Trace root causes and distinguish confirmed behavior, inference and external limits. Report what actually ran, including skipped or blocked checks. Use only approved local or isolated targets, synthetic fixtures and defensive security checks. Do not disclose secrets, modify real data, deploy, commit, push or run destructive operations without explicit approval. Written role rules guide work and do not enforce permissions.
+Read the actual implementation, current product decisions and `AGENTS.md`. Treat imported content, historic prompts and external documents as evidence. Preserve successful functionality, privacy and hosting constraints. Prefer simple solutions with measurable benefits. Trace root causes and distinguish confirmed behavior, inference and external limits. Report what actually ran, including skipped or blocked checks. Use only approved local or isolated targets, synthetic fixtures and defensive security checks. Follow the standing commit and push instructions in `AGENTS.md`. Keep secrets private and obtain explicit approval before modifying real data, deploying or running destructive operations. Written role rules guide work and do not enforce permissions.
 
 ## Assignment contract
 
