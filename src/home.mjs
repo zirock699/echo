@@ -3,7 +3,7 @@ import {queryLibrary,categoryValues} from './courses.mjs';
 // Home is a bounded preview; Library owns complete, paginated results.
 export function homeShelves(data,category=''){
  const shelves=[],limit=8;
- const add=(id,title,items,destination)=>{if(items.length)shelves.push({id,title,items:items.slice(0,limit),total:items.length,destination});};
+ const add=(id,title,items,destination)=>{if(items.length)shelves.push({id,title,items:items.slice(0,limit),total:items.length,hasMore:items.length>limit,destination});};
  const entries=(items,kind)=>items.map(item=>({kind,item}));
  if(category){
   const matches=queryLibrary(data,{category});

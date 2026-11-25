@@ -26,3 +26,13 @@ test('See all artwork resolves real member lessons across courses and collection
  assert.deepEqual(shelfArtworkLessons(data,shelf).map(l=>l.id),['l1','l2','l3','l4']);
  assert.deepEqual(shelfArtworkLessons(data,{items:[]}),[]);
 });
+
+
+test('complete shelf previews do not offer a redundant See all destination',()=>{
+ for(const count of [1,2,8,9]){
+  const data=fixture();data.lessons=data.lessons.slice(0,count);
+  const shelf=homeShelves(data).find(s=>s.id==='recent');
+  assert.equal(shelf.hasMore,count>8);
+  assert.equal(shelf.items.length,Math.min(count,8));
+ }
+});

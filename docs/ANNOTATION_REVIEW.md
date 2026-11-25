@@ -68,3 +68,19 @@ Hosted checks used the signed-in existing app and saved audio/YouTube lessons. P
 The hosted player was inspected with real uploaded audio: direct forward/backward line selection, keyboard browsing, return to the active phrase, current-word actions and native scroll positioning. Regression tests cover centring, reduced motion, and preservation of the exact reading node and manual scroll position across transport renders. These checks do not establish physical touch behaviour or successful YouTube streaming. The transcript scrolls inside the fixed player; this is distinct from unwanted document scrolling.
 
 Final continuous-transcript screenshots were inspected at 320 by 568 and 390 by 844 in dark mode, at 390 by 844 in light mode, and at 844 by 390 and 1280 by 800 in dark mode. The main document stayed within the viewport; the transcript remained independently scrollable. The return action sits outside the transcript edge mask so it stays readable. The light header's inherited background was removed after inspection to keep the backdrop continuous.
+
+
+## Shelf, footer and notice annotations, 25 November 2026
+
+This set supersedes the earlier requirement for an unconditional See all card.
+
+| Comment | Implementation | Verification |
+| --- | --- | --- |
+| 1 | Show the four-thumbnail See all card and heading link only when additional results exist beyond the eight-item preview. | Culture, courses and collections with one item have no redundant See all control. Counts of 1, 2, 8 and 9 are covered by tests. |
+| 2 | Visible 44px left/right shelf controls, separate from See all. Controls disappear when content fits and disable at each edge. Native touch, trackpad and keyboard scrolling remain. | At 704 by 833, Recently added scrolls from 0 to 480 to the 775px end; left/right edge states update. Keyboard Home returns to 0. See all opens the matching complete lesson list. Single-card tracks fit at 320 by 568. |
+| 3 | Seek track and tool icons share a vertical centre; the clock sits beneath the track. The seek target is 44px high. Rebalanced footer and gesture-gap rows retain transcript space. | Measured identical track/tool centres at 320 by 568, 414 by 833, 704 by 833 and 1280 by 800. Player document dimensions match the viewport, also at 390 by 844 and 844 by 390. Keyboard seeking updates the phrase clock. |
+| 4 | Conflict, connection and storage notices share one fixed, dismissible component outside page flow. Review/Retry/Details remain accessible. Dismissal is keyed to the issue and conflict revision, without choosing a copy or discarding edits. Settings retains conflict review. | Isolated hosted fixture uses the production component without loading personal data. Heading position remains exactly 419.92px before/after showing and dismissing a conflict notice on mobile. Desktop position is also unchanged. Dark/light notices, compact-player clearance and player placement checked. Unit tests preserve both library copies and show a later conflict after earlier dismissal. |
+
+All 170 Node tests and the Worker build pass. No lint command is configured. Screenshots were inspected for dark 320 by 568 Home/player, dark 390 by 844 player, dark 704 by 833 shelves/player, dark 844 by 390 player, dark 1280 by 800 player and light 390 by 844 Home/player. Notice checks used the isolated production-component fixture at mobile and desktop sizes, rather than manufacturing a conflict in the user's library. Original Dark appearance was restored.
+
+This scope does not change the playback engine, parser, timing, grouping, source offsets or practice semantics. It does not establish physical-phone gesture behaviour or successful YouTube streaming. The visual detector reports the existing Inter choice, which is deliberately preserved, and misreads inherited heading sizes in the unlinked test fixture; rendered hierarchy was inspected. No personal media, transcript exports or library fixtures are committed.

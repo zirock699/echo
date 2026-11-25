@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Echo Studio notice presentation checks</title>
+<link rel="stylesheet" href="/src/style.css">
+<style>main{padding:18px;max-width:800px}label{display:flex;align-items:center;gap:8px;margin:16px 0}.qa-content{height:130vh}.qa-content p{max-width:50ch}</style>
+<body class="view-home">
+<main>
+ <h1>Notice presentation</h1>
+ <p>This isolated fixture uses the production notice component. It does not load or change library data.</p>
+ <label>Notice<select id="notice-mode"><option value="cloud">None</option><option value="conflict">Newer copy</option><option value="offline">Connection unavailable</option><option value="storage-error">Storage unavailable</option></select></label>
+ <label>Appearance<select id="notice-theme"><option value="dark">Dark</option><option value="light">Light</option></select></label>
+ <label><input id="notice-mini" type="checkbox"> With compact player</label>
+ <label><input id="notice-player" type="checkbox"> Player placement</label>
+ <div class="qa-content"><h2 id="layout-anchor">Content stays in place</h2><p>The notification should float above the page without moving this heading. Dismissal hides the notification only.</p></div>
+</main><div id="notice-host"></div>
+<script type="module">
+import {syncIssueKey,syncNoticeHTML} from '/src/sync-notice.mjs';
+const state={mode:'cloud',revision:1,conflict:{revision:2}};
+const host=document.querySelector('#notice-host');let dismissed=null;
+function draw(){host.innerHTML=syncNoticeHTML(state,{dismissed});}
+document.querySelector('#notice-mode').onchange=e=>{state.mode=e.target.value;dismissed=null;draw();};
+document.querySelector('#notice-theme').onchange=e=>document.body.classList.toggle('light',e.target.value==='light');
+document.querySelector('#notice-mini').onchange=e=>document.body.classList.toggle('has-compact-audio',e.target.checked);
+document.querySelector('#notice-player').onchange=e=>document.body.classList.toggle('view-player',e.target.checked);
+host.onclick=e=>{if(e.target.closest('[data-action="dismiss-sync"]')){dismissed=syncIssueKey(state);draw();}};
+</script>
+</body></html>
